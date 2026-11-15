@@ -4,7 +4,7 @@ An AI-assisted security log analyzer built with **Spring Boot 3** and **Spring A
 
 Upload an Apache/Nginx access log or an SSH auth log. The app detects attack patterns deterministically, then has an LLM write a readable incident report with remediation advice.
 
-**Live demo:** https://YOUR-APP.onrender.com *(replace after deploy)*
+**Live demo:** https://ai-log-analyzer-5l3n.onrender.com
 
 ---
 
@@ -46,9 +46,9 @@ All implemented locally in [`LogAnalysisService`](src/main/java/com/abhijeet/log
 ### Example
 
 ```bash
-curl -X POST "https://YOUR-APP.onrender.com/api/logs/upload" -F "file=@access.log"
-curl "https://YOUR-APP.onrender.com/api/logs/summary"
-curl "https://YOUR-APP.onrender.com/api/logs/analyze"
+curl -X POST "https://ai-log-analyzer-5l3n.onrender.com/api/logs/upload" -F "file=@access.log"
+curl "https://ai-log-analyzer-5l3n.onrender.com/api/logs/summary"
+curl "https://ai-log-analyzer-5l3n.onrender.com/api/logs/analyze"
 ```
 
 The analyze endpoint returns both halves:
