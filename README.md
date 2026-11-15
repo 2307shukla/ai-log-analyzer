@@ -37,6 +37,8 @@ All implemented locally in [`LogAnalysisService`](src/main/java/com/abhijeet/log
 
 ## API
 
+**Interactive docs:** https://ai-log-analyzer-5l3n.onrender.com/swagger-ui.html
+
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/logs/upload` | Upload a log (multipart field `file`) |
@@ -83,6 +85,8 @@ Unrecognised lines are never dropped — they are kept with their raw text and a
 | Storage | In-memory (`LogStore`) |
 | Build | Maven, multi-stage Docker with cached dependencies |
 | Hosting | Render (free Docker web service) |
+
+**Operational:** `/actuator/health` for Render health checks and uptime pingers, Swagger UI for API exploration, and Bucket4j rate limiting (10 analyses/minute per IP) so a script cannot drain the free Gemini quota.
 
 **No paid dependency.** No database, no paid SDK, no credit card.
 
@@ -131,6 +135,7 @@ The `Dockerfile` caches Maven dependencies in a layer, so only your changed sour
 - **Free-tier cold start.** Render sleeps after ~15 minutes idle; the first request afterwards can take up to a minute.
 - **No authentication.** Public endpoint — do not upload confidential production logs.
 - **Detection is rule-based, not adaptive.** The LLM explains findings; it does not discover new attack classes.
+- **Rate limiting is per-instance.** Buckets live in memory; multiple instances would need Redis.
 - **Sample data is synthetic.** IPs use documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`).
 
 ---
