@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Log Analyzer</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #0b0d12; color: #e6e8ee;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 32px 20px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.4px; }
+  .sub { color: #8b95a7; font-size: 13px; margin-bottom: 26px; }
+  .status {
+    display: inline-flex; align-items: center; gap: 7px; background: #10251a;
+    color: #4ade80; border: 1px solid #1c4530; padding: 4px 11px;
+    border-radius: 999px; font-size: 12px; font-weight: 600; margin-bottom: 22px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
+  .panel {
+    background: #14181f; border: 1px solid #232a36; border-radius: 12px;
+    padding: 22px; margin-bottom: 18px;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input[type=file] { color: #8b95a7; font-size: 13px; }
+  button {
+    background: #3b82f6; color: #fff; border: 0; padding: 10px 18px;
+    border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer;
+  }
+  button.alt { background: #1e293b; border: 1px solid #334155; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 16px; }
+  .stat { background: #0b0d12; border: 1px solid #232a36; border-radius: 9px; padding: 12px; }
+  .stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #8b95a7; }
+  .stat .v { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  .signals { margin-top: 16px; }
+  .signals div {
+    font-size: 13px; color: #fbbf24; background: #241d0f; border: 1px solid #453413;
+    border-radius: 7px; padding: 8px 11px; margin-bottom: 7px;
+  }
+  pre {
+    background: #0b0d12; border: 1px solid #232a36; border-radius: 9px;
+    padding: 16px; white-space: pre-wrap; word-break: break-word;
+    font-size: 13.5px; line-height: 1.65; color: #c8cfdb; margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .err { color: #f87171; }
+  .eps { font-size: 13px; color: #8b95a7; }
+  code { background: #1c222c; padding: 2px 6px; border-radius: 5px; color: #93c5fd; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI Log Analyzer</h1>
+  <div class="sub">Deterministic detection &middot; LLM-written incident report</div>
+  <div class="status"><span class="dot"></span> Service online</div>
+
+  <div class="panel">
+    <div class="row">
+      <input type="file" id="file" accept=".log,.txt">
+      <button id="upload">Upload log</button>
+      <button id="analyze" class="alt">Analyze</button>
+    </div>
+    <div id="summary"></div>
+  </div>
+
+  <div class="panel">
+    <pre id="report">Upload a log file, or press Analyze to use the bundled sample (Apache/Nginx + SSH auth).</pre>
+  </div>
+
+  <div class="panel eps">
+    <div><code>POST /api/logs/upload</code> &mdash; multipart field <code>file</code></div>
+    <div><code>GET /api/logs/summary</code> &mdash; statistics only, no AI call</div>
+    <div><code>GET /api/logs/analyze</code> &mdash; stats + LLM report</div>
+  </div>
+</div>
+
+<script>
+  const fileInput = document.getElementById('file');
+  const summaryEl = document.getElementById('summary');
+  const reportEl = document.getElementById('report');
+  const uploadBtn = document.getElementById('upload');
+  const analyzeBtn = document.getElementById('analyze');
+
+  function esc(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+  function renderSummary(data) {
+    const s = data.summary;
+    if (!s) { summaryEl.innerHTML = '<p class="eps">' + esc(data.message || '') + '</p>'; return; }
+
+    const topIp = Object.keys(s.topIps || {})[0] || '-';
+    const f5xx = (s.statusClasses && s.statusClasses['5xx']) || 0;
+
+    let html = '<div class="stats">'
+      + '<div class="stat"><div class="k">Lines</div><div class="v">' + s.totalLines + '</div></div>'
+      + '<div class="stat"><div class="k">Parsed</div><div class="v">' + s.parsedEvents + '</div></div>'
+      + '<div class="stat"><div class="k">5xx errors</div><div class="v">' + f5xx + '</div></div>'
+      + '<div class="stat"><div class="k">Top source</div><div class="v" style="font-size:14px">' + esc(topIp) + '</div></div>'
+      + '</div>';
+
+    const signals = s.signals || [];
+    if (signals.length) {
+      html += '<div class="signals">' + signals.map(x => '<div>' + esc(x) + '</div>').join('') + '</div>';
+    }
+    summaryEl.innerHTML = html;
+  }
+
+  async function post(url, opts) {
+    const res = await fetch(url, opts);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { error: text }; }
+    if (!res.ok) throw new Error(data.detail || data.error || ('HTTP ' + res.status));
+    return data;
+  }
+
+  uploadBtn.onclick = async () => {
+    const f = fileInput.files[0];
+    if (!f) { reportEl.textContent = 'Choose a .log or .txt file first.'; return; }
+    uploadBtn.disabled = true;
+    reportEl.textContent = 'Parsing…';
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const data = await post('/api/logs/upload', { method: 'POST', body: fd });
+      renderSummary(data);
+      reportEl.textContent = 'Loaded ' + (data.loaded || '') + ' lines from ' + data.file + '. Press Analyze for the AI report.';
+    } catch (e) {
+      reportEl.textContent = 'Upload failed: ' + e.message;
+    } finally { uploadBtn.disabled = false; }
+  };
+
+  analyzeBtn.onclick = async () => {
+    analyzeBtn.disabled = true;
+    reportEl.textContent = 'Analyzing… (first request may take up to a minute if the service was asleep)';
+    try {
+      const data = await post('/api/logs/analyze');
+      renderSummary(data);
+      reportEl.textContent = data.report || 'No report returned.';
+    } catch (e) {
+      reportEl.textContent = 'Analysis failed: ' + e.message;
+    } finally { analyzeBtn.disabled = false; }
+  };
+</script>
+</body>
+</html>
