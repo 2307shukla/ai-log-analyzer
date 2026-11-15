@@ -117,6 +117,23 @@ spring.ai.openai.chat.options.model=gemini-3.6-flash
 
 ---
 
+## Testing
+
+```bash
+./mvnw test
+```
+
+**11 tests**, covering both halves of the pipeline:
+
+| Test class | Covers |
+|---|---|
+| `LogParserTest` | Apache combined and SSH auth formats, unrecognised lines, empty input |
+| `LogAnalysisServiceTest` | Brute-force threshold, injection/scanner paths, 5xx clustering, traffic concentration, clean traffic, status bucketing |
+
+The rule tests matter most: detection is the product here, and a rule that silently stops firing is invisible without them.
+
+---
+
 ## Deploying to Render
 
 1. Push this repo to GitHub
