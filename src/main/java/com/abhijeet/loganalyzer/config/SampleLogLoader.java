@@ -15,10 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * Loads the bundled sample log at startup so the dashboard has something to
- * analyse immediately - no upload required for a first look.
- *
- * Never throws: a missing or unreadable sample must not stop the app booting.
+ * Loads the bundled sample log at startup so the dashboard has something to analyse.
  */
 @Component
 public class SampleLogLoader implements ApplicationRunner {

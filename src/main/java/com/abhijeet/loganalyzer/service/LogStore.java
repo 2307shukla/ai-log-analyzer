@@ -7,9 +7,6 @@ import java.util.List;
 
 /**
  * Holds the currently loaded log in memory.
- *
- * Deliberately simple: this is a demo project, and an in-memory store means
- * zero database cost. It is also the main limitation - see the README.
  */
 @Service
 public class LogStore {

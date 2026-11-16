@@ -14,16 +14,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Two-stage analysis:
- *
- *   1. {@link #summarize} computes deterministic statistics locally - counts,
- *      ratios, suspicious paths. No AI involved, so it is free, instant and
- *      reproducible.
- *   2. {@link #analyze} hands that compact summary to the LLM, which writes the
- *      narrative report and remediation advice.
- *
- * Splitting it this way means the model reasons over verified numbers instead
- * of hallucinating patterns out of raw text.
+ * Computes detection statistics locally, then asks the model to write the report from that summary.
  */
 @Service
 public class LogAnalysisService {
