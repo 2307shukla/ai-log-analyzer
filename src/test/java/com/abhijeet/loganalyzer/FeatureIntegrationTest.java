@@ -58,7 +58,7 @@ class FeatureIntegrationTest {
 
     @Test
     void rejectsAnUnknownExportFormat() throws Exception {
-        mockMvc.perform(get("/api/logs/export").param("format", "pdf"))
+        mockMvc.perform(get("/api/logs/export").param("format", "docx"))
                 .andExpect(status().isBadRequest());
     }
 

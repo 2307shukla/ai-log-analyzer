@@ -7,10 +7,11 @@ import com.abhijeet.loganalyzer.service.LogAnalysisService;
 import com.abhijeet.loganalyzer.service.LogParser;
 import com.abhijeet.loganalyzer.service.LogStore;
 import com.abhijeet.loganalyzer.model.LogSummary;
+import com.abhijeet.loganalyzer.service.PdfReport;
+import com.abhijeet.loganalyzer.service.ReportCache;
 import com.abhijeet.loganalyzer.service.ReportExporter;
 import com.abhijeet.loganalyzer.service.SampleCatalog;
 import com.abhijeet.loganalyzer.service.Timeline;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -45,13 +46,15 @@ public class LogController {
     private final LogAnalysisService analysisService;
     private final LogStore store;
     private final SampleCatalog samples;
+    private final ReportCache reports;
 
     public LogController(LogParser parser, LogAnalysisService analysisService, LogStore store,
-                         SampleCatalog samples) {
+                         SampleCatalog samples, ReportCache reports) {
         this.parser = parser;
         this.analysisService = analysisService;
         this.store = store;
         this.samples = samples;
+        this.reports = reports;
     }
 
     /** Upload a log file. Parsing is deterministic - no AI call, so this is instant and free. */
@@ -238,7 +241,9 @@ public class LogController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("file", store.name(sessionId));
         body.put("summary", analysisService.summarize(events));
-        body.put("report", analysisService.analyze(events));
+        String report = analysisService.analyze(events);
+        reports.put(sessionId, events, report);
+        body.put("report", report);
         return ResponseEntity.ok(body);
     }
 
@@ -265,39 +270,50 @@ public class LogController {
         return ResponseEntity.ok(body);
     }
 
-    /** Downloadable report built from the deterministic findings only - no AI call, no quota used. */
-    @Operation(summary = "Download the report as Markdown (format=md) or JSON (format=json)")
+    /**
+     * Downloadable report built from the deterministic findings, plus the AI incident report when
+     * one was already generated for this log. Never calls the model, so it uses no quota.
+     */
+    @Operation(summary = "Download the report: format=pdf (stats, charts, findings, AI report), md, json, "
+            + "or csv (findings only). No AI call.")
     @GetMapping("/export")
-    public ResponseEntity<String> export(@RequestParam(defaultValue = "md") String format,
-                                         HttpServletRequest request) throws JsonProcessingException {
+    public ResponseEntity<byte[]> export(@RequestParam(defaultValue = "md") String format,
+                                         HttpServletRequest request) throws IOException {
         String sessionId = sessionId(request);
         if (store.isEmpty(sessionId)) {
             return error(404, "No log loaded. Upload a file to begin.");
         }
 
-        LogSummary summary = analysisService.summarize(store.get(sessionId));
+        List<LogEvent> events = store.get(sessionId);
+        LogSummary summary = analysisService.summarize(events);
         String name = store.name(sessionId);
+        String aiReport = reports.get(sessionId, events);
 
         // The download name is fixed, never taken from the uploaded file name.
-        if ("md".equalsIgnoreCase(format)) {
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"log-analysis-report.md\"")
-                    .contentType(new MediaType("text", "markdown", java.nio.charset.StandardCharsets.UTF_8))
-                    .body(ReportExporter.markdown(name, summary));
-        }
-        if ("json".equalsIgnoreCase(format)) {
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"log-analysis-report.json\"")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(ReportExporter.json(name, summary));
-        }
-        return error(400, "Unsupported format. Use md or json.");
+        return switch (format.toLowerCase(java.util.Locale.ROOT)) {
+            case "md" -> download("log-analysis-report.md", new MediaType("text", "markdown", StandardCharsets.UTF_8),
+                    ReportExporter.markdown(name, summary, aiReport).getBytes(StandardCharsets.UTF_8));
+            case "json" -> download("log-analysis-report.json", MediaType.APPLICATION_JSON,
+                    ReportExporter.json(name, summary, aiReport).getBytes(StandardCharsets.UTF_8));
+            case "csv" -> download("log-analysis-findings.csv", new MediaType("text", "csv", StandardCharsets.UTF_8),
+                    ReportExporter.csv(summary).getBytes(StandardCharsets.UTF_8));
+            case "pdf" -> download("log-analysis-report.pdf", MediaType.APPLICATION_PDF,
+                    PdfReport.render(name, summary, aiReport));
+            default -> error(400, "Unsupported format. Use pdf, md, json or csv.");
+        };
     }
 
-    private static ResponseEntity<String> error(int status, String message) {
+    private static ResponseEntity<byte[]> download(String fileName, MediaType type, byte[] body) {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .contentType(type)
+                .body(body);
+    }
+
+    private static ResponseEntity<byte[]> error(int status, String message) {
         return ResponseEntity.status(status)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body("{\"error\":\"" + message + "\"}");
+                .body(("{\"error\":\"" + message + "\"}").getBytes(StandardCharsets.UTF_8));
     }
 
     /** The caller's session id, or null if they have not uploaded anything (no session is created). */

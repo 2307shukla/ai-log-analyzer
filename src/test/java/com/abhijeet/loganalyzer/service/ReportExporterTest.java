@@ -68,4 +68,36 @@ class ReportExporterTest {
         assertEquals("CRITICAL", root.get("summary").get("riskLevel").asText());
         assertTrue(root.get("summary").get("findings").size() > 0);
     }
+
+    @Test
+    void csvHasOneRowPerFindingWithEveryColumn() {
+        String csv = ReportExporter.csv(compromised());
+        String[] lines = csv.split("\r\n");
+
+        assertEquals("severity,rule,title,mitre,count,description,evidence,recommendation", lines[0]);
+        assertEquals(compromised().findings().size() + 1, lines.length);
+        assertTrue(lines[1].startsWith("\"CRITICAL\",\"COMPROMISED_LOGIN\""));
+        assertTrue(csv.contains("\"T1078 Valid Accounts\""));
+    }
+
+    @Test
+    void csvCellsCannotRunAsSpreadsheetFormulas() {
+        assertEquals("\"'=HYPERLINK(\"\"http://x\"\")\"", ReportExporter.csvCell("=HYPERLINK(\"http://x\")"));
+        assertEquals("\"'+1\"", ReportExporter.csvCell("+1"));
+        assertEquals("\"'@SUM(A1)\"", ReportExporter.csvCell("@SUM(A1)"));
+        assertEquals("\"a b\"", ReportExporter.csvCell("a\r\nb"));
+        assertEquals("\"\"", ReportExporter.csvCell(null));
+    }
+
+    @Test
+    void markdownAndJsonIncludeACachedAiReportSafely() throws Exception {
+        String md = ReportExporter.markdown("auth.log", compromised(), "## Executive summary\nBlock <b>203.0.113.5</b>");
+        assertTrue(md.contains("## AI incident report"));
+        assertTrue(md.contains("Block &lt;b&gt;203.0.113.5&lt;/b&gt;"));
+        assertFalse(ReportExporter.markdown("auth.log", compromised(), null).contains("AI incident report"));
+
+        JsonNode root = new ObjectMapper().readTree(ReportExporter.json("auth.log", compromised(), "text"));
+        assertEquals("text", root.get("report").asText());
+        assertFalse(new ObjectMapper().readTree(ReportExporter.json("auth.log", compromised())).has("report"));
+    }
 }

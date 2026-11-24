@@ -25,6 +25,8 @@ class ChatPromptTest {
         assertTrue(prompt.contains("203.0.113.5"));
         assertTrue(prompt.contains("Answer ONLY from the log summary"));
         assertTrue(prompt.contains("(none)"));
+        assertTrue(prompt.contains("The log format was detected as: " + summary.detectedFormat()));
+        assertTrue(prompt.contains("triggered alerts"));
     }
 
     @Test

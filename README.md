@@ -93,6 +93,19 @@ rules:
 
 Triggered alerts appear at the top of the dashboard, in the summary JSON and in the exports.
 
+### Reports and exports
+All exports are built from the deterministic findings, so they never call the model. If the AI incident report has already been written for the loaded log, it is included.
+
+| Format | Contents |
+|---|---|
+| **PDF** (`format=pdf`) | Risk score, detected format, triggered alerts, every finding with MITRE technique, evidence and fix, top offenders with location, request and error charts (vector bars), status codes, and the AI incident report. Built with [Apache PDFBox](https://pdfbox.apache.org) (Apache-2.0). |
+| **CSV** (`format=csv`) | One row per finding: severity, rule, title, MITRE, count, description, evidence, recommendation. Cells that a spreadsheet would run as formulas are neutralised. |
+| **JSON** (`format=json`) | The full summary (findings, alerts, offenders, timeline) plus the AI report when present. |
+| **Markdown** (`format=md`) | A readable report for tickets and wikis. |
+
+### Chat with the log
+Ask questions in plain language ("Which IP should I block?", "What did the root account do?", "Why is the pod crash-looping?"). The model gets the detected format, findings, alerts, offenders and statistics, never the raw log, and answers only from them. Suggested questions change with the detected format.
+
 ---
 
 ## API
@@ -111,7 +124,7 @@ Triggered alerts appear at the top of the dashboard, in the summary JSON and in 
 | `GET` | `/api/logs/summary` | Findings, risk score, timeline and statistics — **no AI call, no quota used** |
 | `GET` | `/api/logs/analyze` | Everything in summary plus the LLM incident report |
 | `POST` | `/api/logs/chat` | Ask a question about the loaded log; JSON `{"question": "...", "history": [...]}` (shares the AI rate limit) |
-| `GET` | `/api/logs/export?format=md\|json` | Downloadable report built from the findings — **no AI call** |
+| `GET` | `/api/logs/export?format=pdf\|csv\|json\|md` | PDF report with charts and AI report, findings CSV, JSON, Markdown — **no AI call** |
 | `GET` | `/actuator/health` | Liveness/readiness probe (used by Render) |
 
 Each visitor's upload is private to their browser session. Visitors who have not uploaded anything see the bundled sample log.
@@ -224,7 +237,7 @@ Environment variables:
 ./mvnw test
 ```
 
-**164 tests**, covering the detection pipeline, the report features and the production hardening:
+**179 tests**, covering the detection pipeline, the report features and the production hardening:
 
 | Test class | Covers |
 |---|---|
@@ -248,6 +261,8 @@ Environment variables:
 | `GeoIpServiceTest` | Offline lookups against a generated test database; missing or corrupt database switches GeoIP off |
 | `AlertEngineTest` / `AlertRuleTest` / `AlertRuleLoaderTest` | Sliding windows (the "more than 5 failed logins in 1 minute" example), grouping, summary rules, validation, YAML and JSON files, safe YAML |
 | `AnalysisIntegrationTest` | Timeline, alert-rule and chart-library endpoints; alerts on every sample; GeoIP in the summary |
+| `PdfReportTest` / `ExportIntegrationTest` | PDF text (stats, findings, charts, AI report), non-Latin and control characters, every sample renders; CSV, JSON and Markdown downloads; cached AI report reused |
+| `ReportCacheTest` | AI report reused only for the same log and visitor; bounded |
 | `RateLimitFilterTest` | Per-client and global limits, forged `X-Forwarded-For` cannot evade the limit, upload limit |
 | `LogStoreTest` | Uploads isolated per session, sample fallback, bounded memory |
 | `SessionIsolationIntegrationTest` | One visitor's upload is never visible to another; health endpoint and security headers |

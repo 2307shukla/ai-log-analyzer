@@ -11,6 +11,7 @@ Everything here is free and open source; nothing needs an account, key or paymen
 | [Jackson](https://github.com/FasterXML/jackson) | via Spring Boot | JSON | Apache-2.0 |
 | [SnakeYAML](https://bitbucket.org/snakeyaml/snakeyaml) | via Spring Boot | Reading `alert-rules.yml` (safe constructor) | Apache-2.0 |
 | [GeoIP2 Java API](https://github.com/maxmind/GeoIP2-java) + MaxMind DB reader | 4.2.0 | Reading the offline GeoIP database | Apache-2.0 |
+| [Apache PDFBox](https://pdfbox.apache.org) | 3.0.3 | PDF report export | Apache-2.0 |
 | [Chart.js](https://www.chartjs.org) | 4.6.2 | Charts, bundled in `static/vendor` ([license](src/main/resources/static/vendor/chart.js.LICENSE.md)) | MIT |
 
 ## Data

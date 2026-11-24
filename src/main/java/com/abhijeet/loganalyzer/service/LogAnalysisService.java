@@ -219,16 +219,20 @@ public class LogAnalysisService {
         LogSummary summary = summarize(events);
 
         String prompt = """
-                You are a senior security analyst reviewing server logs.
+                You are a senior security and reliability analyst reviewing a log file.
+                The log format was detected as: %s.
 
                 Analyse the summary below and write a concise incident report.
 
                 Rules:
                 - Use ONLY the data provided. Never invent activity that is not in the summary.
                 - If the evidence is weak, say so plainly.
-                - Refer to specific IP addresses, paths and counts from the data.
-                - The findings already carry a severity, a MITRE ATT&CK technique and evidence.
-                  Build the report on them and do not change a severity or invent a technique.
+                - Refer to specific IP addresses, accounts, paths, event names and counts from the data.
+                - The findings were computed deterministically and already carry a severity, a MITRE ATT&CK
+                  technique and evidence. Build the report on them; do not change a severity or invent a technique.
+                - Mention the triggered alerts and the top offenders (with their location when given).
+                - For reliability findings (crash loops, OOM kills, exceptions, error bursts) give operational
+                  advice, not security advice.
                 - Do not suggest illegal or offensive actions. Remediation must be defensive.
 
                 Respond in markdown using exactly these sections:
@@ -240,7 +244,7 @@ public class LogAnalysisService {
 
                 Log summary (JSON):
                 %s
-                """.formatted(toJson(summary.withoutTimeline()));
+                """.formatted(summary.detectedFormat(), toJson(summary.withoutTimeline()));
 
         return chatModel.call(prompt);
     }
@@ -268,11 +272,14 @@ public class LogAnalysisService {
         }
 
         return """
-                You are a senior security analyst answering questions about one server log.
+                You are a senior security and reliability analyst answering questions about one log file.
+                The log format was detected as: %s.
 
                 Rules:
-                - Answer ONLY from the log summary below. If the summary does not contain the answer,
-                  say that the log does not show it. Never invent addresses, counts or events.
+                - Answer ONLY from the log summary below: its findings, triggered alerts, top offenders,
+                  formats and statistics. If the summary does not contain the answer, say that the log
+                  does not show it. Never invent addresses, accounts, counts or events.
+                - Findings carry a deterministic severity and MITRE ATT&CK technique; quote them, do not change them.
                 - Keep the answer short: a few sentences or a short bullet list, in markdown.
                 - Refer to specific IP addresses, paths, counts and finding rules where they help.
                 - Remediation advice must be defensive. Do not help attack anyone.
@@ -285,7 +292,7 @@ public class LogAnalysisService {
                 Earlier conversation:
                 %s
                 Question: %s
-                """.formatted(toJson(summary.withoutTimeline()),
+                """.formatted(summary.detectedFormat(), toJson(summary.withoutTimeline()),
                 conversation.isEmpty() ? "(none)\n" : conversation.toString(),
                 clip(question, MAX_QUESTION));
     }

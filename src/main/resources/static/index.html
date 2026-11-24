@@ -108,6 +108,23 @@
   .ask input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   .muted { color: var(--muted); font-size: 13px; }
+  .exports { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+  .busy { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; gap: 10px; align-items: center; justify-content: center;
+          background: #1c1917; color: #fde047; font-weight: 700; font-size: 13px; padding: 8px; }
+  .busy[hidden] { display: none; }
+  .spin { width: 14px; height: 14px; border: 2px solid #fde047; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+  .btn:focus-visible, .select:focus-visible, .seg button:focus-visible, .drop:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+  @media (max-width: 600px) {
+    body { padding: 16px 10px 32px; }
+    h1 { font-size: 23px; }
+    .panel { padding: 14px; border-radius: 12px; }
+    .bars .r { grid-template-columns: 96px 1fr 40px; }
+    .btn { padding: 9px 12px; font-size: 13px; }
+    .msg { max-width: 92%; }
+    .charts .box { height: 200px; }
+  }
   .seg { display: inline-flex; border: 1.5px solid var(--accent); border-radius: 9px; overflow: hidden; }
   .seg button { background: #fffdf5; border: 0; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text); }
   .seg button.on { background: var(--accent); color: #fde047; font-weight: 700; }
@@ -128,6 +145,7 @@
 </style>
 </head>
 <body>
+<div class="busy" id="busy" role="status" aria-live="polite" hidden><span class="spin" aria-hidden="true"></span><span id="busyText">Working&hellip;</span></div>
 <div class="wrap">
   <h1>AI Log Analyzer</h1>
   <div class="sub">Deterministic detection with MITRE ATT&amp;CK mapping &middot; LLM-written incident report</div>
@@ -141,8 +159,12 @@
     </div>
     <div class="row" style="margin-top:14px">
       <button class="btn" id="analyze">Analyze with AI</button>
-      <a class="btn alt" href="/api/logs/export?format=md">Export report (.md)</a>
-      <a class="btn alt" href="/api/logs/export?format=json">Export (.json)</a>
+      <span class="exports" role="group" aria-label="Export">
+        <a class="btn alt" href="/api/logs/export?format=pdf" download>PDF report</a>
+        <a class="btn alt" href="/api/logs/export?format=csv" download>Findings CSV</a>
+        <a class="btn alt" href="/api/logs/export?format=json" download>JSON</a>
+        <a class="btn alt" href="/api/logs/export?format=md" download>Markdown</a>
+      </span>
       <span class="src" id="src"></span>
     </div>
     <div class="row" style="margin-top:12px">
@@ -188,7 +210,7 @@
     <div><code>GET /api/logs/analyze</code> &mdash; summary plus the LLM report</div>
     <div><code>GET /api/logs/timeline?bucket=auto|minute|hour</code> &mdash; requests and errors over time with spike flags</div>
     <div><code>GET /api/alerts/rules</code> &mdash; the active alert rules</div>
-    <div><code>GET /api/logs/export?format=md|json</code> &mdash; downloadable report; no AI call</div>
+    <div><code>GET /api/logs/export?format=pdf|csv|json|md</code> &mdash; PDF report with charts and the AI report, findings as CSV, full JSON, Markdown; no AI call</div>
     <div><code>GET /actuator/health</code> &middot; <a class="link" href="/swagger-ui.html">Swagger UI</a></div>
   </div>
 </div>
@@ -332,10 +354,30 @@
       + '<div class="panel"><h2>Status codes</h2>' + statusBar(s.statusClasses)
       + '<h2 style="margin-top:6px">Top user agents</h2>' + bars(s.topUserAgents, 'No user agents in this log.') + '</div></div>';
     drawCharts(s.timeline, s.timelineBucketMinutes);
+    suggestFor(s.detectedFormat || '');
     document.getElementById('bucketSeg').addEventListener('click', e => {
       const b = e.target.getAttribute && e.target.getAttribute('data-b');
       if (b) loadTimeline(b);
     });
+  }
+
+  // -------------------------------------------------------------- suggestions
+
+  const SUGGESTIONS = [
+    [/Apache|JSON/, ['Which IP is the biggest threat?', 'Explain the SQL injection attempts', 'Did any attack get a 200 response?']],
+    [/SSH|syslog/, ['Was any account compromised?', 'Which addresses should I block?', 'Who used sudo or su?']],
+    [/Windows/, ['Which account was compromised?', 'Who cleared the audit log?', 'Which new accounts were created?']],
+    [/CloudTrail/, ['What did the root account do?', 'Which IAM changes look risky?', 'What was deleted?']],
+    [/firewall/, ['Which source ran a port scan?', 'Which ports were probed?', 'Should I block these sources?']],
+    [/Spring|Java/, ['What is the root cause of the errors?', 'When did the error burst start?', 'Which exception should I fix first?']],
+    [/Docker|Kubernetes/, ['Why is the pod crash-looping?', 'Which containers ran out of memory?', 'What should I fix first?']],
+  ];
+
+  function suggestFor(format) {
+    const match = SUGGESTIONS.find(([re]) => re.test(format));
+    const list = (match ? match[1] : ['Which IP is the biggest threat?', 'Was any account compromised?']).concat(['What should I fix first?']);
+    document.getElementById('suggest').innerHTML = Array.from(new Set(list))
+      .map(q => '<button type="button">' + esc(q) + '</button>').join('');
   }
 
   // ---------------------------------------------------------- alerts, offenders
@@ -451,13 +493,46 @@
 
   // ----------------------------------------------------------------- network
 
-  async function request(url, options) {
-    const res = await fetch(url, options);
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch (e) { data = { error: text }; }
-    if (!res.ok) throw new Error(data.detail || data.error || ('HTTP ' + res.status));
-    return data;
+  const busyEl = document.getElementById('busy');
+  const busyText = document.getElementById('busyText');
+  let busyCount = 0;
+
+  /** Shows the top loading bar while any request runs. */
+  function busy(on, label) {
+    busyCount = Math.max(0, busyCount + (on ? 1 : -1));
+    if (on && label) busyText.textContent = label;
+    busyEl.hidden = busyCount === 0;
+    document.body.setAttribute('aria-busy', busyCount > 0 ? 'true' : 'false');
+  }
+
+  /** Plain-language message for a failed request. */
+  function friendly(status, data) {
+    const server = data && (data.detail || data.error);
+    if (status === 413) return 'That file is larger than the 5 MB limit. Upload a shorter excerpt.';
+    if (status === 429) return server || 'Too many requests. Wait a minute and try again.';
+    if (status === 400 && server) return server;
+    if (status === 404 && server) return server;
+    if (status === 502 || status === 503) return 'The server is starting up (free hosting sleeps when idle). Try again in a minute.';
+    return server || ('The server returned an error (HTTP ' + status + ').');
+  }
+
+  async function request(url, options, label) {
+    busy(true, label || 'Working\u2026');
+    try {
+      let res;
+      try {
+        res = await fetch(url, options);
+      } catch (e) {
+        throw new Error('Could not reach the server. Check your connection; if the service was asleep, try again in a minute.');
+      }
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch (e) { data = { error: res.ok ? text : '' }; }
+      if (!res.ok) throw new Error(friendly(res.status, data));
+      return data;
+    } finally {
+      busy(false);
+    }
   }
 
   const MAX_BYTES = 5 * 1024 * 1024;
@@ -481,7 +556,7 @@
       const form = new FormData();
       form.append('file', file);
       form.append('format', formatSelect.value);
-      const data = await request('/api/logs/upload', { method: 'POST', body: form });
+      const data = await request('/api/logs/upload', { method: 'POST', body: form }, 'Uploading and analysing ' + file.name + '\u2026');
       render(data);
       noteSampling(data);
       history.length = 0;
@@ -503,7 +578,7 @@
     analyzeBtn.disabled = true;
     reportEl.innerHTML = '<span class="muted">Analyzing&hellip; (the model usually answers in a few seconds)</span>';
     try {
-      const data = await request('/api/logs/analyze');
+      const data = await request('/api/logs/analyze', undefined, 'The AI is writing the incident report\u2026');
       render(data);
       reportEl.innerHTML = data.report ? markdown(data.report) : '<span class="muted">No report returned.</span>';
     } catch (e) {
