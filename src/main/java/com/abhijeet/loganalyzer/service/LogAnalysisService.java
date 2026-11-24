@@ -32,8 +32,20 @@ public class LogAnalysisService {
     private final FindingDetector detector = new FindingDetector();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    private final GeoLookup geo;
+
+    private final AlertRuleSource alertRules;
+
+    /** Without GeoIP or alert rules; used by tests and tools. */
     public LogAnalysisService(ChatModel chatModel) {
+        this(chatModel, GeoLookup.NONE, AlertRuleSource.NONE);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public LogAnalysisService(ChatModel chatModel, GeoLookup geo, AlertRuleSource alertRules) {
         this.chatModel = chatModel;
+        this.geo = geo == null ? GeoLookup.NONE : geo;
+        this.alertRules = alertRules == null ? AlertRuleSource.NONE : alertRules;
     }
 
     // ------------------------------------------------------------------ stats
@@ -118,6 +130,7 @@ public class LogAnalysisService {
         }
 
         List<Finding> findings = detector.detect(events);
+        int riskScore = FindingDetector.riskScore(findings);
         Timeline.Result timeline = Timeline.build(events);
 
         return new LogSummary(
@@ -129,7 +142,7 @@ public class LogAnalysisService {
                 top(authFailures, TOP_N),
                 top(suspicious, TOP_PATHS),
                 signals,
-                FindingDetector.riskScore(findings),
+                riskScore,
                 FindingDetector.riskLevel(findings),
                 findings,
                 timeline.points(),
@@ -139,7 +152,10 @@ public class LogAnalysisService {
                 ipCounts.size(),
                 top(agentCounts, TOP_AGENTS),
                 formatLabels(formatCounts),
-                detectedFormat(formatCounts));
+                detectedFormat(formatCounts),
+                IpProfiler.profile(events, geo),
+                geo.source(),
+                AlertEngine.evaluate(events, findings, riskScore, alertRules.rules()));
     }
 
     private static Map<String, Integer> formatLabels(Map<LogFormat, Integer> counts) {

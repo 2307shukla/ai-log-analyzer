@@ -448,6 +448,28 @@ public class FindingDetector {
         return SUCCESS_MARKERS.stream().anyMatch(raw::contains);
     }
 
+    /** Injection, XSS or traversal payload in a URL (decoded first). */
+    static boolean isAttackPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        String d = decode(path);
+        return containsAny(d, SQLI) || containsAny(d, XSS) || containsAny(d, TRAVERSAL);
+    }
+
+    static boolean isSensitivePath(String path) {
+        return path != null && containsAny(decode(path), SENSITIVE_PATHS);
+    }
+
+    /** The scanner a user agent names, or null. */
+    static String scanner(String agent) {
+        if (agent == null) {
+            return null;
+        }
+        String lower = agent.toLowerCase(Locale.ROOT);
+        return SCANNER_AGENTS.stream().filter(lower::contains).findFirst().orElse(null);
+    }
+
     private static boolean containsAny(String text, List<String> needles) {
         for (String needle : needles) {
             if (text.contains(needle)) {

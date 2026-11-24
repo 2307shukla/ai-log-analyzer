@@ -21,6 +21,9 @@ import java.util.Map;
  * @param topUserAgents         most common user agents
  * @param formats               recognised lines per detected format, most common first
  * @param detectedFormat        the dominant format, or "Mixed: A, B" when no format dominates
+ * @param suspiciousIps         top offenders, highest score first, with GeoIP when available
+ * @param geoipSource           the GeoIP database in use, or null when GeoIP is unavailable
+ * @param alerts                alert rules that fired, most severe first
  */
 public record LogSummary(
         int totalLines,
@@ -41,13 +44,16 @@ public record LogSummary(
         int uniqueIps,
         Map<String, Integer> topUserAgents,
         Map<String, Integer> formats,
-        String detectedFormat
+        String detectedFormat,
+        List<SuspiciousIp> suspiciousIps,
+        String geoipSource,
+        List<Alert> alerts
 ) {
 
     /** Same summary without the timeline, used for the AI prompt to keep it small. */
     public LogSummary withoutTimeline() {
         return new LogSummary(totalLines, parsedEvents, topIps, statusClasses, topPaths,
                 authFailuresByIp, suspiciousPaths, signals, riskScore, riskLevel, findings,
-                List.of(), timelineBucketMinutes, firstSeen, lastSeen, uniqueIps, topUserAgents, formats, detectedFormat);
+                List.of(), timelineBucketMinutes, firstSeen, lastSeen, uniqueIps, topUserAgents, formats, detectedFormat, suspiciousIps, geoipSource, alerts);
     }
 }

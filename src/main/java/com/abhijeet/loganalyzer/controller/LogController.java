@@ -9,6 +9,7 @@ import com.abhijeet.loganalyzer.service.LogStore;
 import com.abhijeet.loganalyzer.model.LogSummary;
 import com.abhijeet.loganalyzer.service.ReportExporter;
 import com.abhijeet.loganalyzer.service.SampleCatalog;
+import com.abhijeet.loganalyzer.service.Timeline;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -175,6 +176,37 @@ public class LogController {
                     return ResponseEntity.ok(body);
                 })
                 .orElseGet(() -> ResponseEntity.status(404).body(Map.of("error", "Unknown sample.")));
+    }
+
+    /** Requests and errors over time, per minute, per hour, or with an automatic bucket size. */
+    @Operation(summary = "Requests and errors over time with spike flags; bucket = auto, minute or hour")
+    @GetMapping("/timeline")
+    public ResponseEntity<Map<String, Object>> timeline(@RequestParam(defaultValue = "auto") String bucket,
+                                                        HttpServletRequest request) {
+        int minutes = switch (bucket.toLowerCase(java.util.Locale.ROOT)) {
+            case "auto" -> 0;
+            case "minute" -> 1;
+            case "hour" -> 60;
+            default -> -1;
+        };
+        if (minutes < 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "bucket must be auto, minute or hour."));
+        }
+        String sessionId = sessionId(request);
+        if (store.isEmpty(sessionId)) {
+            return ResponseEntity.ok(Map.of("message", "No log loaded. Upload a file to begin."));
+        }
+        Timeline.Result result;
+        try {
+            result = Timeline.build(store.get(sessionId), minutes);
+        } catch (Timeline.TooManyPointsException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("file", store.name(sessionId));
+        body.put("bucketMinutes", result.bucketMinutes());
+        body.put("points", result.points());
+        return ResponseEntity.ok(body);
     }
 
     /** Statistics only - no AI call, no quota used. */

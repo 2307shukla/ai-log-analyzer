@@ -1,0 +1,163 @@
+# Alert rules for AI Log Analyzer.
+#
+# Each rule counts a metric per group (ip, user or global) inside a sliding window and fires when
+# the count is greater than the threshold ("operator: gte" for greater-or-equal).
+# windowMinutes: 0 counts the whole log. Severity: low, medium, high or critical.
+#
+# To use your own rules, point ALERT_RULES_FILE at a YAML or JSON file with the same layout.
+# Metrics: failed_logins, requests, events, client_errors, server_errors, not_found,
+#   attack_requests, app_errors, exceptions, firewall_blocks, distinct_ports, crash_loops,
+#   oom_kills, iam_changes, deleted_resources, sudo_failures, accounts_created,
+#   risk_score (whole file), finding (with rule: FINDING_ID)
+
+rules:
+  - id: brute-force-burst
+    name: More than 5 failed logins from one IP in 1 minute
+    metric: failed_logins
+    groupBy: ip
+    threshold: 5
+    windowMinutes: 1
+    severity: high
+
+  - id: password-guessing-hour
+    name: More than 20 failed logins from one IP in 1 hour
+    metric: failed_logins
+    groupBy: ip
+    threshold: 20
+    windowMinutes: 60
+    severity: high
+
+  - id: web-attack-burst
+    name: More than 3 injection or traversal requests from one IP in 5 minutes
+    metric: attack_requests
+    groupBy: ip
+    threshold: 3
+    windowMinutes: 5
+    severity: high
+
+  - id: not-found-scan
+    name: More than 20 missing pages requested by one IP in 5 minutes
+    metric: not_found
+    groupBy: ip
+    threshold: 20
+    windowMinutes: 5
+    severity: medium
+
+  - id: request-flood
+    name: More than 300 requests from one IP in 1 minute
+    metric: requests
+    groupBy: ip
+    threshold: 300
+    windowMinutes: 1
+    severity: medium
+
+  - id: server-error-storm
+    name: More than 10 server errors in 5 minutes
+    metric: server_errors
+    groupBy: global
+    threshold: 10
+    windowMinutes: 5
+    severity: high
+
+  - id: port-scan
+    name: One IP tried more than 10 ports in 10 minutes
+    metric: distinct_ports
+    groupBy: ip
+    threshold: 10
+    windowMinutes: 10
+    severity: high
+
+  - id: firewall-block-flood
+    name: More than 50 blocked connections from one IP in 10 minutes
+    metric: firewall_blocks
+    groupBy: ip
+    threshold: 50
+    windowMinutes: 10
+    severity: medium
+
+  - id: app-error-burst
+    name: More than 10 application errors in 1 minute
+    metric: app_errors
+    groupBy: global
+    threshold: 10
+    windowMinutes: 1
+    severity: medium
+
+  - id: exception-storm
+    name: More than 20 exceptions in 5 minutes
+    metric: exceptions
+    groupBy: global
+    threshold: 20
+    windowMinutes: 5
+    severity: high
+
+  - id: crash-loop
+    name: A container is crash-looping
+    metric: crash_loops
+    threshold: 0
+    severity: high
+
+  - id: oom-kill
+    name: A process was killed for running out of memory
+    metric: oom_kills
+    threshold: 0
+    severity: high
+
+  - id: iam-change-burst
+    name: More than 3 IAM changes by one identity in 10 minutes
+    metric: iam_changes
+    groupBy: user
+    threshold: 3
+    windowMinutes: 10
+    severity: high
+    operator: gte
+
+  - id: mass-deletion
+    name: More than 2 cloud resources deleted by one identity in 10 minutes
+    metric: deleted_resources
+    groupBy: user
+    threshold: 2
+    windowMinutes: 10
+    severity: critical
+
+  - id: sudo-failures
+    name: More than 2 failed sudo or su attempts by one user in 10 minutes
+    metric: sudo_failures
+    groupBy: user
+    threshold: 2
+    windowMinutes: 10
+    severity: medium
+
+  - id: new-account
+    name: A new user account was created
+    metric: accounts_created
+    threshold: 0
+    severity: medium
+
+  - id: compromised-account
+    name: A login succeeded after repeated failures
+    metric: finding
+    rule: COMPROMISED_LOGIN
+    threshold: 0
+    severity: critical
+
+  - id: logging-disabled
+    name: Cloud audit logging was stopped or deleted
+    metric: finding
+    rule: CLOUD_LOGGING_DISABLED
+    threshold: 0
+    severity: critical
+
+  - id: audit-log-cleared
+    name: The Windows Security log was cleared
+    metric: finding
+    rule: AUDIT_LOG_CLEARED
+    threshold: 0
+    severity: critical
+
+  - id: critical-risk
+    name: Overall risk score is 70 or more
+    metric: risk_score
+    threshold: 70
+    operator: gte
+    severity: critical

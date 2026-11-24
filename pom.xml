@@ -61,6 +61,13 @@
         </dependency>
 
         <!-- OpenAPI / Swagger UI - free, Apache 2.0 -->
+        <!-- Offline GeoIP reader for the DB-IP Lite database (Apache-2.0); no API calls -->
+        <dependency>
+            <groupId>com.maxmind.geoip2</groupId>
+            <artifactId>geoip2</artifactId>
+            <version>4.2.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
