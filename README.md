@@ -67,6 +67,34 @@ Everything that came from the log is untrusted text. Evidence is clipped, stripp
 
 ---
 
+## Analysis features
+
+### Charts
+Requests and errors over time, drawn with [Chart.js](https://www.chartjs.org) (MIT), served from `/vendor/chart.umd.min.js` with no CDN. Errors are split into 4xx, 5xx, failed logins and application/system errors. Buckets are automatic, per minute or per hour (`GET /api/logs/timeline?bucket=`). A bucket counts as a **spike** when it is at least 3x the usual bucket and at least 10 events (5 for errors); spikes are drawn in red.
+
+### Suspicious IPs and GeoIP
+Every source address is scored 0–100 from what it did (breaking in after failures, failed logins, injection requests, scanners, probes, port scans, firewall blocks, cloud logging or IAM changes) and the top 10 are shown with the reasons. Severity bands match the overall risk: 70+ critical, 40+ high, 15+ medium.
+
+Locations come from the free, offline **[DB-IP City Lite](https://db-ip.com/db/download/ip-to-city-lite)** database (CC BY 4.0, no account or key), read with MaxMind's open-source reader. The Docker build downloads it; the file is memory-mapped, so it does not use Java heap. Private, loopback and documentation addresses are never looked up, host names are never resolved, and no lookup leaves the server. **If the file is missing, GeoIP is skipped** and everything else works. Build with `--build-arg GEOIP_EDITION=country` for a smaller image (countries only) or `none` to leave it out.
+
+### Alert rules
+Rules live in [`alert-rules.yml`](src/main/resources/alert-rules.yml) (20 bundled rules). Point `ALERT_RULES_FILE` at your own YAML or JSON file to replace them; invalid rules are skipped and listed at `GET /api/alerts/rules`.
+
+```yaml
+rules:
+  - id: brute-force-burst
+    name: More than 5 failed logins from one IP in 1 minute
+    metric: failed_logins     # 17 event metrics, plus risk_score and finding
+    groupBy: ip               # ip, user or global
+    threshold: 5              # fires when the count is greater (operator: gte for >=)
+    windowMinutes: 1          # sliding window; 0 = whole log
+    severity: high            # low, medium, high, critical
+```
+
+Triggered alerts appear at the top of the dashboard, in the summary JSON and in the exports.
+
+---
+
 ## API
 
 **Interactive docs:** https://ai-log-analyzer-5l3n.onrender.com/swagger-ui.html
@@ -78,6 +106,8 @@ Everything that came from the log is untrusted text. Evidence is clipped, stripp
 | `POST` | `/api/logs/format?format=` | Re-read the loaded log with a manual format override (`auto` to detect again) |
 | `GET` | `/api/logs/samples` | Bundled sample logs, one per format |
 | `POST` | `/api/logs/samples/{id}` | Load a sample into your session |
+| `GET` | `/api/logs/timeline?bucket=auto\|minute\|hour` | Requests and errors over time, with spike flags |
+| `GET` | `/api/alerts/rules` | Active alert rules, their source file and any skipped rules |
 | `GET` | `/api/logs/summary` | Findings, risk score, timeline and statistics — **no AI call, no quota used** |
 | `GET` | `/api/logs/analyze` | Everything in summary plus the LLM incident report |
 | `POST` | `/api/logs/chat` | Ask a question about the loaded log; JSON `{"question": "...", "history": [...]}` (shares the AI rate limit) |
@@ -194,7 +224,7 @@ Environment variables:
 ./mvnw test
 ```
 
-**129 tests**, covering the detection pipeline, the report features and the production hardening:
+**164 tests**, covering the detection pipeline, the report features and the production hardening:
 
 | Test class | Covers |
 |---|---|
@@ -213,6 +243,11 @@ Environment variables:
 | `MitreMappingTest` | Every ATT&CK entry is well formed; availability rules have none |
 | `SampleFilesTest` | Each bundled sample is detected as its format and produces its expected findings |
 | `FormatsAndSamplesIntegrationTest` | Sample and format endpoints, per-session override, sampling of a 100,050-line upload |
+| `TimelineTest` | Error breakdown by type, spike flags, per-minute and per-hour buckets, the per-minute limit |
+| `IpProfilerTest` / `IpClassifierTest` | Per-address scores and reasons, GeoIP only for public addresses, host names never resolved |
+| `GeoIpServiceTest` | Offline lookups against a generated test database; missing or corrupt database switches GeoIP off |
+| `AlertEngineTest` / `AlertRuleTest` / `AlertRuleLoaderTest` | Sliding windows (the "more than 5 failed logins in 1 minute" example), grouping, summary rules, validation, YAML and JSON files, safe YAML |
+| `AnalysisIntegrationTest` | Timeline, alert-rule and chart-library endpoints; alerts on every sample; GeoIP in the summary |
 | `RateLimitFilterTest` | Per-client and global limits, forged `X-Forwarded-For` cannot evade the limit, upload limit |
 | `LogStoreTest` | Uploads isolated per session, sample fallback, bounded memory |
 | `SessionIsolationIntegrationTest` | One visitor's upload is never visible to another; health endpoint and security headers |

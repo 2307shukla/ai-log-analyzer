@@ -108,6 +108,20 @@
   .ask input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   .muted { color: var(--muted); font-size: 13px; }
+  .seg { display: inline-flex; border: 1.5px solid var(--accent); border-radius: 9px; overflow: hidden; }
+  .seg button { background: #fffdf5; border: 0; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; color: var(--text); }
+  .seg button.on { background: var(--accent); color: #fde047; font-weight: 700; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .charts .box { position: relative; height: 240px; }
+  @media (max-width: 760px) { .charts { grid-template-columns: 1fr; } }
+  .tablewrap { overflow-x: auto; }
+  table.off { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.off th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); padding: 6px 8px; border-bottom: 1.5px solid var(--line); }
+  table.off td { padding: 8px; border-bottom: 1px solid #fde68a; vertical-align: top; }
+  table.off td.ip { font-family: ui-monospace, Menlo, monospace; white-space: nowrap; }
+  .score { display: inline-block; min-width: 34px; text-align: center; font-weight: 800; border-radius: 6px; padding: 1px 6px; color: #fff; }
+  .alert { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: #fffef8; border: 1px solid #fde68a; border-left: 5px solid; margin-bottom: 8px; }
+  .alert .msg2 { font-size: 13px; color: #44403c; }
   code { background: #fef3c7; padding: 2px 6px; border-radius: 5px; color: #7c2d12; font-size: 12.5px; }
   .err { color: #b91c1c; }
   a.link { color: #1d4ed8; }
@@ -172,11 +186,14 @@
     <div><code>POST /api/logs/upload</code> &mdash; multipart field <code>file</code></div>
     <div><code>GET /api/logs/summary</code> &mdash; findings, risk score, timeline; no AI call</div>
     <div><code>GET /api/logs/analyze</code> &mdash; summary plus the LLM report</div>
+    <div><code>GET /api/logs/timeline?bucket=auto|minute|hour</code> &mdash; requests and errors over time with spike flags</div>
+    <div><code>GET /api/alerts/rules</code> &mdash; the active alert rules</div>
     <div><code>GET /api/logs/export?format=md|json</code> &mdash; downloadable report; no AI call</div>
     <div><code>GET /actuator/health</code> &middot; <a class="link" href="/swagger-ui.html">Swagger UI</a></div>
   </div>
 </div>
 
+<script src="/vendor/chart.umd.min.js"></script>
 <script>
   const COLORS = { CRITICAL: '#dc2626', HIGH: '#ea580c', MEDIUM: '#d97706', LOW: '#0284c7', CLEAN: '#15803d' };
   const STATUS_COLORS = { '2xx': '#16a34a', '3xx': '#0284c7', '4xx': '#d97706', '5xx': '#dc2626' };
@@ -304,11 +321,111 @@
     srcEl.innerHTML = 'Showing: <b>' + esc(data.file || 'log') + '</b>';
     dash.innerHTML =
       '<div class="panel">' + formats(s) + '<div class="grid2">' + gauge(s.riskScore, s.riskLevel) + kpis(s) + '</div></div>'
+      + '<div class="panel"><h2>Triggered alerts</h2>' + alerts(s.alerts) + '</div>'
       + '<div class="panel"><h2>Findings</h2>' + findings(s.findings) + '</div>'
-      + '<div class="panel"><h2>Requests over time</h2>' + timeline(s.timeline, s.timelineBucketMinutes) + '</div>'
+      + '<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Requests and errors over time</h2>'
+      + '<div class="seg" id="bucketSeg" role="group" aria-label="Chart bucket size"><button type="button" data-b="auto" class="on">Auto</button>'
+      + '<button type="button" data-b="minute">Per minute</button><button type="button" data-b="hour">Per hour</button></div></div>'
+      + '<div id="timelineBox">' + timelineView(s.timeline, s.timelineBucketMinutes) + '</div></div>'
+      + '<div class="panel"><h2>Top offenders</h2>' + offenders(s.suspiciousIps, s.geoipSource) + '</div>'
       + '<div class="grid3"><div class="panel"><h2>Top sources</h2>' + bars(s.topIps, 'No source addresses found.') + '</div>'
       + '<div class="panel"><h2>Status codes</h2>' + statusBar(s.statusClasses)
       + '<h2 style="margin-top:6px">Top user agents</h2>' + bars(s.topUserAgents, 'No user agents in this log.') + '</div></div>';
+    drawCharts(s.timeline, s.timelineBucketMinutes);
+    document.getElementById('bucketSeg').addEventListener('click', e => {
+      const b = e.target.getAttribute && e.target.getAttribute('data-b');
+      if (b) loadTimeline(b);
+    });
+  }
+
+  // ---------------------------------------------------------- alerts, offenders
+
+  function alerts(list) {
+    if (!list || !list.length) return '<div class="clean">No alert rule fired.</div>'
+      + '<div class="muted" style="margin-top:4px"><a class="link" href="/api/alerts/rules" target="_blank" rel="noopener">View the alert rules</a></div>';
+    return list.map(a => '<div class="alert" style="border-left-color:' + color(a.severity) + '">'
+      + '<span class="badge" style="background:' + color(a.severity) + '">' + esc(a.severity) + '</span>'
+      + '<div><div class="ftitle">' + esc(a.name) + '</div><div class="msg2">' + esc(a.message) + '</div></div></div>').join('')
+      + '<div class="muted"><a class="link" href="/api/alerts/rules" target="_blank" rel="noopener">View the alert rules</a></div>';
+  }
+
+  function offenders(list, geoSource) {
+    const note = geoSource
+      ? '<div class="muted" style="margin-top:8px">Locations from the offline <a class="link" href="https://db-ip.com" target="_blank" rel="noopener">IP Geolocation by DB-IP</a> database (CC BY 4.0). Private and documentation addresses have no location.</div>'
+      : '<div class="muted" style="margin-top:8px">GeoIP database not installed on this server, so locations are skipped.</div>';
+    if (!list || !list.length) return '<div class="clean">No address did anything suspicious.</div>' + note;
+    const rows = list.map(o => {
+      const where = o.country ? esc([o.city, o.country].filter(Boolean).join(', ')) : '<span class="muted">' + esc(o.network) + '</span>';
+      const activity = [
+        o.failedLogins ? num(o.failedLogins) + ' failed logins' : '',
+        o.attackRequests ? num(o.attackRequests) + ' attack requests' : '',
+        o.probes ? num(o.probes) + ' probes' : '',
+        o.blocked ? num(o.blocked) + ' blocked' : '',
+        o.portsProbed ? num(o.portsProbed) + ' ports' : ''].filter(Boolean).join(' &middot; ') || num(o.events) + ' events';
+      return '<tr><td class="ip">' + esc(o.ip) + '</td>'
+        + '<td><span class="score" style="background:' + color(o.severity) + '">' + num(o.score) + '</span> <span class="muted">' + esc(o.severity) + '</span></td>'
+        + '<td>' + where + '</td><td>' + activity + '</td>'
+        + '<td>' + (o.reasons || []).map(esc).join('; ') + '</td></tr>';
+    }).join('');
+    return '<div class="tablewrap"><table class="off"><thead><tr><th>Address</th><th>Score</th><th>Location</th><th>Activity</th><th>Why</th></tr></thead><tbody>'
+      + rows + '</tbody></table></div>' + note;
+  }
+
+  // ------------------------------------------------------------------ charts
+
+  let charts = [];
+
+  function timelineView(points, bucketMinutes) {
+    if (!points || !points.length) return '<div class="muted">This log has no readable timestamps, so there is no timeline.</div>';
+    if (!window.Chart) return timeline(points, bucketMinutes);
+    const spikes = points.filter(p => p.spike || p.errorSpike).length;
+    return '<div class="charts"><div><div class="muted">Requests / entries' + (spikes ? ' &middot; <b style="color:#dc2626">' + spikes + ' spike' + (spikes > 1 ? 's' : '') + '</b> in red' : '') + '</div>'
+      + '<div class="box"><canvas id="reqChart" role="img" aria-label="Requests over time"></canvas></div></div>'
+      + '<div><div class="muted">Errors by type</div><div class="box"><canvas id="errChart" role="img" aria-label="Errors over time"></canvas></div></div></div>'
+      + '<div class="legend" style="margin-top:8px"><span>bucket: ' + bucketLabel(bucketMinutes) + ' (UTC)</span></div>';
+  }
+
+  function bucketLabel(m) {
+    return m >= 1440 ? (m / 1440) + ' day' : m >= 60 ? (m / 60) + ' h' : m + ' min';
+  }
+
+  function drawCharts(points, bucketMinutes) {
+    charts.forEach(c => { try { c.destroy(); } catch (e) { /* already gone */ } });
+    charts = [];
+    if (!window.Chart || !points || !points.length) return;
+    const labels = points.map(p => label(p.start, bucketMinutes));
+    const common = { responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { labels: { boxWidth: 10, font: { size: 11 } } } },
+      scales: { x: { ticks: { maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } } } };
+    try {
+      const req = document.getElementById('reqChart');
+      const err = document.getElementById('errChart');
+      if (req) charts.push(new Chart(req, { type: 'bar', data: { labels, datasets: [{
+        label: 'requests / entries', data: points.map(p => num(p.requests)),
+        backgroundColor: points.map(p => p.spike ? '#dc2626' : '#a16207') }] }, options: common }));
+      if (err) charts.push(new Chart(err, { type: 'bar', data: { labels, datasets: [
+        { label: '4xx', data: points.map(p => num(p.clientErrors)), backgroundColor: '#d97706', stack: 'e' },
+        { label: '5xx', data: points.map(p => num(p.serverErrors)), backgroundColor: '#dc2626', stack: 'e' },
+        { label: 'failed logins', data: points.map(p => num(p.authFailures)), backgroundColor: '#7c3aed', stack: 'e' },
+        { label: 'app / system', data: points.map(p => num(p.appErrors)), backgroundColor: '#0284c7', stack: 'e' }] },
+        options: { ...common, scales: { x: { ...common.scales.x, stacked: true }, y: { ...common.scales.y, stacked: true } } } }));
+    } catch (e) {
+      // A chart failure must never hide the rest of the report.
+    }
+  }
+
+  async function loadTimeline(bucket) {
+    const box = document.getElementById('timelineBox');
+    document.querySelectorAll('#bucketSeg button').forEach(b => b.classList.toggle('on', b.getAttribute('data-b') === bucket));
+    box.innerHTML = '<div class="muted">Loading&hellip;</div>';
+    try {
+      const data = await request('/api/logs/timeline?bucket=' + encodeURIComponent(bucket));
+      box.innerHTML = timelineView(data.points, data.bucketMinutes);
+      drawCharts(data.points, data.bucketMinutes);
+    } catch (e) {
+      box.innerHTML = '<div class="err">' + esc(e.message) + '</div>';
+    }
   }
 
   // -------------------------------------------------------------- AI report

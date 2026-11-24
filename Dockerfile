@@ -25,13 +25,33 @@ RUN set -e; \
     done; \
     echo "Build failed after 5 attempts"; exit 1
 
+# ---------- GeoIP data: free DB-IP Lite database (CC BY 4.0), optional ----------
+# Downloaded at build time so the image works offline. If the download fails the image is still
+# built and GeoIP is skipped at runtime. GEOIP_EDITION=country makes a smaller image (no cities);
+# GEOIP_EDITION=none skips GeoIP entirely.
+FROM alpine:3.20 AS geoip
+ARG GEOIP_EDITION=city
+RUN mkdir -p /geoip && cd /geoip && \
+    if [ "$GEOIP_EDITION" != "none" ]; then \
+      for m in $(date -u +%Y-%m) $(date -u -d "@$(( $(date +%s) - 2678400 ))" +%Y-%m); do \
+        url="https://download.db-ip.com/free/dbip-${GEOIP_EDITION}-lite-${m}.mmdb.gz"; \
+        if wget -q -T 120 -O db.gz "$url" && gunzip -c db.gz > dbip-lite.mmdb; then \
+          echo "GeoIP: using $url"; rm -f db.gz; break; \
+        fi; \
+        echo "GeoIP: $url not available"; rm -f db.gz dbip-lite.mmdb; \
+      done; \
+    fi; \
+    ls -la /geoip
+
 # ---------- runtime stage: JRE only, non-root ----------
 FROM eclipse-temurin:21-jre-alpine
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build /app/target/ai-log-analyzer-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=geoip /geoip /app/geoip
 USER app
 ENV PORT=8080 \
+    GEOIP_DATABASE=/app/geoip/dbip-lite.mmdb \
     JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
