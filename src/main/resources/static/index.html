@@ -5,147 +5,320 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Log Analyzer</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --bg: #0b0d12; --panel: #14181f; --line: #232a36; --muted: #8b95a7; --text: #e6e8ee;
+    --crit: #ef4444; --high: #f97316; --med: #f59e0b; --low: #38bdf8; --ok: #4ade80;
+  }
   * { box-sizing: border-box; }
   body {
-    margin: 0; min-height: 100vh; background: #0b0d12; color: #e6e8ee;
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
     font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding: 32px 20px;
+    padding: 28px 18px 48px;
   }
-  .wrap { max-width: 880px; margin: 0 auto; }
-  h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.4px; }
-  .sub { color: #8b95a7; font-size: 13px; margin-bottom: 26px; }
-  .status {
-    display: inline-flex; align-items: center; gap: 7px; background: #10251a;
-    color: #4ade80; border: 1px solid #1c4530; padding: 4px 11px;
-    border-radius: 999px; font-size: 12px; font-weight: 600; margin-bottom: 22px;
+  .wrap { max-width: 1040px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.5px; }
+  h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 600; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; background: #10251a; color: var(--ok);
+    border: 1px solid #1c4530; padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
   }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
-  .panel {
-    background: #14181f; border: 1px solid #232a36; border-radius: 12px;
-    padding: 22px; margin-bottom: 18px;
-  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-  input[type=file] { color: #8b95a7; font-size: 13px; }
-  button {
-    background: #3b82f6; color: #fff; border: 0; padding: 10px 18px;
-    border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer;
+  .grid2 { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  .drop {
+    border: 2px dashed #334155; border-radius: 10px; padding: 22px; text-align: center;
+    color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
   }
-  button.alt { background: #1e293b; border: 1px solid #334155; }
-  button:disabled { opacity: 0.45; cursor: default; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 16px; }
-  .stat { background: #0b0d12; border: 1px solid #232a36; border-radius: 9px; padding: 12px; }
-  .stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #8b95a7; }
-  .stat .v { font-size: 20px; font-weight: 700; margin-top: 2px; }
-  .signals { margin-top: 16px; }
-  .signals div {
-    font-size: 13px; color: #fbbf24; background: #241d0f; border: 1px solid #453413;
-    border-radius: 7px; padding: 8px 11px; margin-bottom: 7px;
+  .drop:hover, .drop.over { border-color: #3b82f6; background: #101827; }
+  .drop strong { color: var(--text); }
+  .drop input { display: none; }
+  .btn {
+    background: #3b82f6; color: #fff; border: 0; padding: 10px 18px; border-radius: 8px;
+    font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block;
   }
-  pre {
-    background: #0b0d12; border: 1px solid #232a36; border-radius: 9px;
-    padding: 16px; white-space: pre-wrap; word-break: break-word;
-    font-size: 13.5px; line-height: 1.65; color: #c8cfdb; margin: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
-  .err { color: #f87171; }
-  .eps { font-size: 13px; color: #8b95a7; }
+  .btn.alt { background: #1e293b; border: 1px solid #334155; color: var(--text); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .src { font-size: 13px; color: var(--muted); }
+  .src b { color: var(--text); }
+
+  .gauge { text-align: center; }
+  .gauge svg { width: 150px; height: 150px; }
+  .gauge .lvl { font-size: 13px; font-weight: 700; letter-spacing: .6px; margin-top: 2px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; align-content: start; }
+  .kpi { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+  .kpi .k { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .kpi .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .kpi .v.small { font-size: 13px; font-weight: 600; word-break: break-all; }
+
+  .finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 9px; padding: 14px 16px; margin-bottom: 12px; background: var(--bg); }
+  .fhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+  .badge { font-size: 11px; font-weight: 800; letter-spacing: .6px; padding: 2px 8px; border-radius: 5px; color: #0b0d12; }
+  .ftitle { font-weight: 700; }
+  .chip { font-size: 11.5px; color: #93c5fd; background: #14233b; border: 1px solid #1e3a5f; padding: 1px 8px; border-radius: 999px; }
+  .cnt { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .fdesc { font-size: 13.5px; color: #c8cfdb; margin: 4px 0 8px; }
+  .ev { margin: 0 0 8px; padding: 8px 10px 8px 26px; background: #0e1219; border-radius: 7px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #aeb8c8; word-break: break-word; }
+  .fix { font-size: 13px; color: #86efac; }
+  .fix b { color: var(--ok); }
+  .clean { color: var(--ok); font-size: 14px; }
+
+  .bars .r { display: grid; grid-template-columns: 150px 1fr 48px; gap: 10px; align-items: center; font-size: 12.5px; margin-bottom: 6px; }
+  .bars .n { color: #c8cfdb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; }
+  .bars .t { background: var(--bg); border-radius: 4px; height: 10px; overflow: hidden; }
+  .bars .f { height: 100%; background: #3b82f6; border-radius: 4px; }
+  .bars .c { text-align: right; color: var(--muted); }
+  .stack { display: flex; height: 14px; border-radius: 6px; overflow: hidden; background: var(--bg); margin-bottom: 8px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+  .chart svg { width: 100%; height: auto; display: block; }
+  .axis { fill: var(--muted); font-size: 11px; }
+
+  .report { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 16px 18px; color: #c8cfdb; font-size: 14px; }
+  .report h3 { margin: 14px 0 6px; font-size: 15px; color: var(--text); }
+  .report h3:first-child { margin-top: 0; }
+  .report h4 { margin: 12px 0 4px; font-size: 14px; color: var(--text); }
+  .report p { margin: 0 0 8px; }
+  .report ul { margin: 0 0 8px; padding-left: 20px; }
+  .muted { color: var(--muted); font-size: 13px; }
   code { background: #1c222c; padding: 2px 6px; border-radius: 5px; color: #93c5fd; font-size: 12.5px; }
+  .err { color: #f87171; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>AI Log Analyzer</h1>
-  <div class="sub">Deterministic detection &middot; LLM-written incident report</div>
-  <div class="status"><span class="dot"></span> Service online</div>
+  <div class="sub">Deterministic detection with MITRE ATT&amp;CK mapping &middot; LLM-written incident report</div>
+  <div class="pill"><span class="dot"></span> Service online</div>
 
-  <div class="panel">
-    <div class="row">
-      <input type="file" id="file" accept=".log,.txt">
-      <button id="upload">Upload log</button>
-      <button id="analyze" class="alt">Analyze</button>
+  <div class="panel" style="margin-top:18px">
+    <div class="drop" id="drop" role="button" tabindex="0" aria-label="Choose a log file to upload">
+      <div><strong>Drop a log here</strong> or click to choose a file</div>
+      <div class="muted">Apache/Nginx access log, SSH auth log, or JSON lines &middot; up to 10 MB &middot; private to your session</div>
+      <input type="file" id="file" accept=".log,.txt,.json,.jsonl">
     </div>
-    <div id="summary"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="analyze">Analyze with AI</button>
+      <a class="btn alt" href="/api/logs/export?format=md">Export report (.md)</a>
+      <a class="btn alt" href="/api/logs/export?format=json">Export (.json)</a>
+      <span class="src" id="src"></span>
+    </div>
   </div>
+
+  <div id="dash"><div class="panel muted">Loading the sample log&hellip; (the first request can take up to a minute if the service was asleep)</div></div>
 
   <div class="panel">
-    <pre id="report">Upload a log file, or press Analyze to use the bundled sample (Apache/Nginx + SSH auth).</pre>
+    <h2>AI incident report</h2>
+    <div class="report" id="report"><span class="muted">Press <b>Analyze with AI</b> to have the model write an incident report from the findings above.</span></div>
   </div>
 
-  <div class="panel eps">
+  <div class="panel muted">
     <div><code>POST /api/logs/upload</code> &mdash; multipart field <code>file</code></div>
-    <div><code>GET /api/logs/summary</code> &mdash; statistics only, no AI call</div>
-    <div><code>GET /api/logs/analyze</code> &mdash; stats + LLM report</div>
+    <div><code>GET /api/logs/summary</code> &mdash; findings, risk score, timeline; no AI call</div>
+    <div><code>GET /api/logs/analyze</code> &mdash; summary plus the LLM report</div>
+    <div><code>GET /api/logs/export?format=md|json</code> &mdash; downloadable report; no AI call</div>
+    <div><code>GET /actuator/health</code> &middot; <a href="/swagger-ui.html" style="color:#93c5fd">Swagger UI</a></div>
   </div>
 </div>
 
 <script>
+  const COLORS = { CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#f59e0b', LOW: '#38bdf8', CLEAN: '#4ade80' };
+  const STATUS_COLORS = { '2xx': '#4ade80', '3xx': '#38bdf8', '4xx': '#f59e0b', '5xx': '#ef4444' };
+
   const fileInput = document.getElementById('file');
-  const summaryEl = document.getElementById('summary');
+  const drop = document.getElementById('drop');
+  const dash = document.getElementById('dash');
   const reportEl = document.getElementById('report');
-  const uploadBtn = document.getElementById('upload');
+  const srcEl = document.getElementById('src');
   const analyzeBtn = document.getElementById('analyze');
 
-  function esc(s) { return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  // Every value that came from a log goes through esc() before it reaches innerHTML.
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+  function num(value) { return Number.isFinite(Number(value)) ? Number(value) : 0; }
+  function color(level) { return COLORS[level] || COLORS.LOW; }
 
-  function renderSummary(data) {
-    const s = data.summary;
-    if (!s) { summaryEl.innerHTML = '<p class="eps">' + esc(data.message || '') + '</p>'; return; }
+  // ---------------------------------------------------------------- dashboard
 
-    const topIp = Object.keys(s.topIps || {})[0] || '-';
-    const f5xx = (s.statusClasses && s.statusClasses['5xx']) || 0;
-
-    let html = '<div class="stats">'
-      + '<div class="stat"><div class="k">Lines</div><div class="v">' + s.totalLines + '</div></div>'
-      + '<div class="stat"><div class="k">Parsed</div><div class="v">' + s.parsedEvents + '</div></div>'
-      + '<div class="stat"><div class="k">5xx errors</div><div class="v">' + f5xx + '</div></div>'
-      + '<div class="stat"><div class="k">Top source</div><div class="v" style="font-size:14px">' + esc(topIp) + '</div></div>'
-      + '</div>';
-
-    const signals = s.signals || [];
-    if (signals.length) {
-      html += '<div class="signals">' + signals.map(x => '<div>' + esc(x) + '</div>').join('') + '</div>';
-    }
-    summaryEl.innerHTML = html;
+  function gauge(score, level) {
+    const c = 2 * Math.PI * 52;
+    const filled = c * Math.max(0, Math.min(100, num(score))) / 100;
+    const col = color(level);
+    return '<div class="gauge"><svg viewBox="0 0 120 120" role="img" aria-label="Risk score ' + num(score) + ' of 100">'
+      + '<circle cx="60" cy="60" r="52" fill="none" stroke="#232a36" stroke-width="10"/>'
+      + '<circle cx="60" cy="60" r="52" fill="none" stroke="' + col + '" stroke-width="10" stroke-linecap="round"'
+      + ' stroke-dasharray="' + filled.toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 60 60)"/>'
+      + '<text x="60" y="64" text-anchor="middle" fill="#e6e8ee" font-size="28" font-weight="700">' + num(score) + '</text>'
+      + '<text x="60" y="82" text-anchor="middle" fill="#8b95a7" font-size="10">/ 100</text></svg>'
+      + '<div class="lvl" style="color:' + col + '">' + esc(level) + ' RISK</div></div>';
   }
 
-  async function post(url, opts) {
-    const res = await fetch(url, opts);
+  function kpis(s) {
+    const f5 = (s.statusClasses && s.statusClasses['5xx']) || 0;
+    const period = s.firstSeen && s.lastSeen ? esc(s.firstSeen.slice(0, 16).replace('T', ' ')) + ' &rarr; ' + esc(s.lastSeen.slice(0, 16).replace('T', ' ')) + ' UTC' : 'no timestamps';
+    return '<div class="kpis">'
+      + kpi('Lines', num(s.totalLines)) + kpi('Parsed', num(s.parsedEvents))
+      + kpi('Unique IPs', num(s.uniqueIps)) + kpi('Findings', (s.findings || []).length)
+      + kpi('5xx errors', f5)
+      + '<div class="kpi" style="grid-column: 1 / -1"><div class="k">Period</div><div class="v small">' + period + '</div></div>'
+      + '</div>';
+  }
+  function kpi(label, value) { return '<div class="kpi"><div class="k">' + label + '</div><div class="v">' + value + '</div></div>'; }
+
+  function findings(list) {
+    if (!list || !list.length) return '<div class="clean">No findings. Traffic looks clean.</div>';
+    return list.map(f => {
+      const col = color(f.severity);
+      const ev = (f.evidence || []).map(e => '<li>' + esc(e) + '</li>').join('');
+      return '<div class="finding" style="border-left-color:' + col + '">'
+        + '<div class="fhead"><span class="badge" style="background:' + col + '">' + esc(f.severity) + '</span>'
+        + '<span class="ftitle">' + esc(f.title) + '</span>'
+        + (f.mitre ? '<span class="chip">' + esc(f.mitre) + '</span>' : '')
+        + '<span class="cnt">' + num(f.count) + ' events &middot; ' + esc(f.rule) + '</span></div>'
+        + '<div class="fdesc">' + esc(f.description) + '</div>'
+        + (ev ? '<ul class="ev">' + ev + '</ul>' : '')
+        + '<div class="fix"><b>Fix:</b> ' + esc(f.recommendation) + '</div></div>';
+    }).join('');
+  }
+
+  function bars(obj, empty) {
+    const keys = Object.keys(obj || {});
+    if (!keys.length) return '<div class="muted">' + esc(empty) + '</div>';
+    const max = Math.max(...keys.map(k => num(obj[k])), 1);
+    return '<div class="bars">' + keys.map(k =>
+      '<div class="r"><div class="n" title="' + esc(k) + '">' + esc(k) + '</div>'
+      + '<div class="t"><div class="f" style="width:' + (num(obj[k]) / max * 100).toFixed(1) + '%"></div></div>'
+      + '<div class="c">' + num(obj[k]) + '</div></div>').join('') + '</div>';
+  }
+
+  function statusBar(classes) {
+    const keys = Object.keys(classes || {});
+    const total = keys.reduce((a, k) => a + num(classes[k]), 0);
+    if (!total) return '<div class="muted">No HTTP status codes in this log.</div>';
+    const seg = keys.map(k => '<div title="' + esc(k) + ': ' + num(classes[k]) + '" style="width:' + (num(classes[k]) / total * 100).toFixed(2)
+      + '%;background:' + (STATUS_COLORS[k] || '#64748b') + '"></div>').join('');
+    const legend = keys.map(k => '<span><i style="background:' + (STATUS_COLORS[k] || '#64748b') + '"></i>' + esc(k) + ' ' + num(classes[k]) + '</span>').join('');
+    return '<div class="stack">' + seg + '</div><div class="legend">' + legend + '</div>';
+  }
+
+  function label(iso, bucketMinutes) {
+    const d = String(iso);
+    return bucketMinutes >= 1440 ? d.slice(5, 10) : d.slice(5, 10) + ' ' + d.slice(11, 16);
+  }
+
+  function timeline(points, bucketMinutes) {
+    if (!points || !points.length) return '<div class="muted">This log has no readable timestamps, so there is no timeline.</div>';
+    const W = 960, H = 170, padL = 6, padB = 22, top = 8;
+    const max = Math.max(...points.map(p => num(p.requests)), 1);
+    const bw = (W - padL) / points.length;
+    const plotH = H - padB - top;
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Requests over time">';
+    points.forEach((p, i) => {
+      const h = num(p.requests) / max * plotH, eh = Math.min(num(p.errors), num(p.requests)) / max * plotH;
+      const x = padL + i * bw + 0.5, w = Math.max(bw - 1.5, 1);
+      const tip = esc(label(p.start, bucketMinutes)) + ': ' + num(p.requests) + ' requests, ' + num(p.errors) + ' errors or failures';
+      svg += '<g><title>' + tip + '</title><rect x="' + x.toFixed(1) + '" y="' + (top + plotH - h).toFixed(1) + '" width="' + w.toFixed(1)
+        + '" height="' + Math.max(h, 0).toFixed(1) + '" fill="#3b82f6" rx="1.5"/>'
+        + (eh > 0 ? '<rect x="' + x.toFixed(1) + '" y="' + (top + plotH - eh).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + eh.toFixed(1) + '" fill="#ef4444" rx="1.5"/>' : '')
+        + '</g>';
+    });
+    const mid = Math.floor(points.length / 2);
+    [[0, 'start'], [mid, 'middle'], [points.length - 1, 'end']].forEach(([i, anchor]) => {
+      svg += '<text class="axis" x="' + (padL + i * bw + (anchor === 'end' ? bw : 0)).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="' + anchor + '">'
+        + esc(label(points[i].start, bucketMinutes)) + '</text>';
+    });
+    svg += '</svg>';
+    const bucket = bucketMinutes >= 1440 ? (bucketMinutes / 1440) + ' day' : bucketMinutes >= 60 ? (bucketMinutes / 60) + ' h' : bucketMinutes + ' min';
+    return '<div class="chart">' + svg + '</div><div class="legend"><span><i style="background:#3b82f6"></i>requests</span>'
+      + '<span><i style="background:#ef4444"></i>errors / failed logins</span><span>bucket: ' + bucket + ' (UTC)</span></div>';
+  }
+
+  function render(data) {
+    const s = data.summary;
+    if (!s) { dash.innerHTML = '<div class="panel muted">' + esc(data.message || 'No log loaded.') + '</div>'; return; }
+    srcEl.innerHTML = 'Showing: <b>' + esc(data.file || 'log') + '</b>';
+    dash.innerHTML =
+      '<div class="panel"><div class="grid2">' + gauge(s.riskScore, s.riskLevel) + kpis(s) + '</div></div>'
+      + '<div class="panel"><h2>Findings</h2>' + findings(s.findings) + '</div>'
+      + '<div class="panel"><h2>Requests over time</h2>' + timeline(s.timeline, s.timelineBucketMinutes) + '</div>'
+      + '<div class="grid3"><div class="panel"><h2>Top sources</h2>' + bars(s.topIps, 'No source addresses found.') + '</div>'
+      + '<div class="panel"><h2>Status codes</h2>' + statusBar(s.statusClasses)
+      + '<h2 style="margin-top:6px">Top user agents</h2>' + bars(s.topUserAgents, 'No user agents in this log.') + '</div></div>';
+  }
+
+  // -------------------------------------------------------------- AI report
+
+  // The text is escaped first, so the few tags added here are the only markup that can appear.
+  function inline(text) {
+    return text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+  function markdown(text) {
+    let html = '', list = false;
+    const close = () => { if (list) { html += '</ul>'; list = false; } };
+    esc(text).split('\n').forEach(line => {
+      const item = line.match(/^\s*[-*] (.*)$/);
+      if (item) { if (!list) { html += '<ul>'; list = true; } html += '<li>' + inline(item[1]) + '</li>'; return; }
+      close();
+      if (/^#{1,2} /.test(line)) html += '<h3>' + inline(line.replace(/^#+ /, '')) + '</h3>';
+      else if (/^#{3,} /.test(line)) html += '<h4>' + inline(line.replace(/^#+ /, '')) + '</h4>';
+      else if (line.trim()) html += '<p>' + inline(line) + '</p>';
+    });
+    close();
+    return html;
+  }
+
+  // ----------------------------------------------------------------- network
+
+  async function request(url, options) {
+    const res = await fetch(url, options);
     const text = await res.text();
     let data;
-    try { data = JSON.parse(text); } catch { data = { error: text }; }
+    try { data = JSON.parse(text); } catch (e) { data = { error: text }; }
     if (!res.ok) throw new Error(data.detail || data.error || ('HTTP ' + res.status));
     return data;
   }
 
-  uploadBtn.onclick = async () => {
-    const f = fileInput.files[0];
-    if (!f) { reportEl.textContent = 'Choose a .log or .txt file first.'; return; }
-    uploadBtn.disabled = true;
-    reportEl.textContent = 'Parsing…';
+  async function upload(file) {
+    if (!file) return;
+    reportEl.innerHTML = '<span class="muted">Parsing&hellip;</span>';
     try {
-      const fd = new FormData();
-      fd.append('file', f);
-      const data = await post('/api/logs/upload', { method: 'POST', body: fd });
-      renderSummary(data);
-      reportEl.textContent = 'Loaded ' + (data.loaded || '') + ' lines from ' + data.file + '. Press Analyze for the AI report.';
+      const form = new FormData();
+      form.append('file', file);
+      render(await request('/api/logs/upload', { method: 'POST', body: form }));
+      reportEl.innerHTML = '<span class="muted">Loaded ' + esc(file.name) + '. Press <b>Analyze with AI</b> for the incident report.</span>';
     } catch (e) {
-      reportEl.textContent = 'Upload failed: ' + e.message;
-    } finally { uploadBtn.disabled = false; }
-  };
+      reportEl.innerHTML = '<span class="err">Upload failed: ' + esc(e.message) + '</span>';
+    }
+  }
 
-  analyzeBtn.onclick = async () => {
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener('change', () => upload(fileInput.files[0]));
+  ['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => upload(e.dataTransfer.files[0]));
+
+  analyzeBtn.addEventListener('click', async () => {
     analyzeBtn.disabled = true;
-    reportEl.textContent = 'Analyzing… (first request may take up to a minute if the service was asleep)';
+    reportEl.innerHTML = '<span class="muted">Analyzing&hellip; (the model usually answers in a few seconds)</span>';
     try {
-      const data = await post('/api/logs/analyze');
-      renderSummary(data);
-      reportEl.textContent = data.report || 'No report returned.';
+      const data = await request('/api/logs/analyze');
+      render(data);
+      reportEl.innerHTML = data.report ? markdown(data.report) : '<span class="muted">No report returned.</span>';
     } catch (e) {
-      reportEl.textContent = 'Analysis failed: ' + e.message;
+      reportEl.innerHTML = '<span class="err">Analysis failed: ' + esc(e.message) + '</span>';
     } finally { analyzeBtn.disabled = false; }
-  };
+  });
+
+  request('/api/logs/summary').then(render).catch(e => {
+    dash.innerHTML = '<div class="panel err">Could not load the sample: ' + esc(e.message) + '</div>';
+  });
 </script>
 </body>
 </html>
-

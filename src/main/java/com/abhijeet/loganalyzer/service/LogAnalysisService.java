@@ -1,11 +1,13 @@
 package com.abhijeet.loganalyzer.service;
 
+import com.abhijeet.loganalyzer.model.Finding;
 import com.abhijeet.loganalyzer.model.LogEvent;
 import com.abhijeet.loganalyzer.model.LogSummary;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,7 +24,10 @@ public class LogAnalysisService {
     private static final int TOP_N = 5;
     private static final int TOP_PATHS = 10;
 
+    private static final int TOP_AGENTS = 5;
+
     private final ChatModel chatModel;
+    private final FindingDetector detector = new FindingDetector();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public LogAnalysisService(ChatModel chatModel) {
@@ -37,8 +42,11 @@ public class LogAnalysisService {
         Map<String, Integer> pathCounts = new LinkedHashMap<>();
         Map<String, Integer> authFailures = new LinkedHashMap<>();
         Map<String, Integer> suspicious = new LinkedHashMap<>();
+        Map<String, Integer> agentCounts = new LinkedHashMap<>();
 
         int parsed = 0;
+        Instant firstSeen = null;
+        Instant lastSeen = null;
 
         for (LogEvent event : events) {
             if (event.ip() != null) {
@@ -56,6 +64,19 @@ public class LogAnalysisService {
             }
             if (event.authFailure() && event.ip() != null) {
                 authFailures.merge(event.ip(), 1, Integer::sum);
+            }
+            String agent = event.userAgent();
+            if (agent != null && !agent.isBlank() && !"-".equals(agent)) {
+                agentCounts.merge(agent, 1, Integer::sum);
+            }
+            Instant when = event.timestamp();
+            if (when != null) {
+                if (firstSeen == null || when.isBefore(firstSeen)) {
+                    firstSeen = when;
+                }
+                if (lastSeen == null || when.isAfter(lastSeen)) {
+                    lastSeen = when;
+                }
             }
         }
 
@@ -90,6 +111,9 @@ public class LogAnalysisService {
             signals.add("No IP addresses could be parsed - the log format may be unrecognised");
         }
 
+        List<Finding> findings = detector.detect(events);
+        Timeline.Result timeline = Timeline.build(events);
+
         return new LogSummary(
                 events.size(),
                 parsed,
@@ -98,7 +122,16 @@ public class LogAnalysisService {
                 top(pathCounts, TOP_PATHS),
                 top(authFailures, TOP_N),
                 top(suspicious, TOP_PATHS),
-                signals);
+                signals,
+                FindingDetector.riskScore(findings),
+                FindingDetector.riskLevel(findings),
+                findings,
+                timeline.points(),
+                timeline.bucketMinutes(),
+                firstSeen == null ? null : firstSeen.toString(),
+                lastSeen == null ? null : lastSeen.toString(),
+                ipCounts.size(),
+                top(agentCounts, TOP_AGENTS));
     }
 
     private Map<String, Integer> top(Map<String, Integer> source, int max) {
@@ -141,6 +174,8 @@ public class LogAnalysisService {
                 - Use ONLY the data provided. Never invent activity that is not in the summary.
                 - If the evidence is weak, say so plainly.
                 - Refer to specific IP addresses, paths and counts from the data.
+                - The findings already carry a severity, a MITRE ATT&CK technique and evidence.
+                  Build the report on them and do not change a severity or invent a technique.
                 - Do not suggest illegal or offensive actions. Remediation must be defensive.
 
                 Respond in markdown using exactly these sections:
@@ -152,7 +187,7 @@ public class LogAnalysisService {
 
                 Log summary (JSON):
                 %s
-                """.formatted(toJson(summary));
+                """.formatted(toJson(summary.withoutTimeline()));
 
         return chatModel.call(prompt);
     }
