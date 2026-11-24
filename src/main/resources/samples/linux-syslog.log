@@ -1,0 +1,16 @@
+Nov 12 09:01:12 app01 CRON[4101]: pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)
+Nov 12 09:05:33 app01 sudo:   alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Nov 12 09:06:10 app01 sudo:   alice : TTY=pts/0 ; PWD=/home/alice ; USER=root ; COMMAND=/usr/bin/apt update
+Nov 12 09:40:02 app01 sudo: pam_unix(sudo:auth): authentication failure; logname=www-data uid=33 euid=0 tty=/dev/pts/2 ruser=www-data rhost=  user=www-data
+Nov 12 09:40:09 app01 sudo: www-data : 3 incorrect password attempts ; TTY=pts/2 ; PWD=/var/www ; USER=root ; COMMAND=/bin/bash
+Nov 12 09:41:30 app01 su: pam_unix(su:auth): authentication failure; logname=www-data uid=33 euid=0 tty=pts/2 ruser=www-data rhost=  user=root
+Nov 12 09:41:31 app01 su: FAILED SU (to root) www-data on pts/2
+Nov 12 09:47:55 app01 sudo:      bob : TTY=pts/1 ; PWD=/home/bob ; USER=root ; COMMAND=/bin/bash
+Nov 12 09:48:20 app01 useradd[5120]: new group: name=sysupdate, GID=1005
+Nov 12 09:48:20 app01 useradd[5120]: new user: name=sysupdate, UID=1005, GID=1005, home=/home/sysupdate, shell=/bin/bash, from=/dev/pts/1
+Nov 12 09:48:41 app01 usermod[5133]: add 'sysupdate' to group 'sudo'
+Nov 12 09:48:41 app01 usermod[5133]: add 'sysupdate' to shadow group 'sudo'
+Nov 12 09:50:03 app01 su: (to root) bob on pts/1
+Nov 12 09:50:03 app01 su: pam_unix(su-l:session): session opened for user root(uid=0) by bob(uid=1001)
+Nov 12 09:52:17 app01 sudo:   sysupdate : TTY=pts/3 ; PWD=/home/sysupdate ; USER=root ; COMMAND=/usr/bin/crontab -e
+Nov 12 10:00:01 app01 systemd[1]: Started Daily apt download activities.

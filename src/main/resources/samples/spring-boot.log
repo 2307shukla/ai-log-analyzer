@@ -1,0 +1,95 @@
+2026-11-12T09:00:01.120Z  INFO 4211 --- [orders-api] [nio-8080-exec-1] c.a.orders.web.OrderController         : GET /api/orders/100 200 in 20ms
+2026-11-12T09:02:01.120Z  INFO 4211 --- [orders-api] [nio-8080-exec-2] c.a.orders.web.OrderController         : GET /api/orders/101 200 in 21ms
+2026-11-12T09:04:01.120Z  INFO 4211 --- [orders-api] [nio-8080-exec-3] c.a.orders.web.OrderController         : GET /api/orders/102 200 in 22ms
+2026-11-12T09:06:01.120Z  INFO 4211 --- [orders-api] [nio-8080-exec-4] c.a.orders.web.OrderController         : GET /api/orders/103 200 in 23ms
+2026-11-12T09:08:01.120Z  INFO 4211 --- [orders-api] [nio-8080-exec-5] c.a.orders.web.OrderController         : GET /api/orders/104 200 in 24ms
+2026-11-12T09:10:01.120Z  INFO 4211 --- [orders-api] [nio-8080-exec-6] c.a.orders.web.OrderController         : GET /api/orders/105 200 in 25ms
+2026-11-12T09:12:44.981Z  WARN 4211 --- [orders-api] [nio-8080-exec-3] com.zaxxer.hikari.pool.PoolBase         : HikariPool-1 - Failed to validate connection (Connection reset)
+2026-11-12T09:13:00.000Z ERROR 4211 --- [orders-api] [nio-8080-exec-1] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:04.001Z ERROR 4211 --- [orders-api] [nio-8080-exec-2] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:08.002Z ERROR 4211 --- [orders-api] [nio-8080-exec-3] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:12.003Z ERROR 4211 --- [orders-api] [nio-8080-exec-4] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:16.004Z ERROR 4211 --- [orders-api] [nio-8080-exec-5] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:20.005Z ERROR 4211 --- [orders-api] [nio-8080-exec-6] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:24.006Z ERROR 4211 --- [orders-api] [nio-8080-exec-7] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:28.007Z ERROR 4211 --- [orders-api] [nio-8080-exec-8] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:32.008Z ERROR 4211 --- [orders-api] [nio-8080-exec-9] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:36.009Z ERROR 4211 --- [orders-api] [nio-8080-exec-1] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:40.010Z ERROR 4211 --- [orders-api] [nio-8080-exec-2] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:44.011Z ERROR 4211 --- [orders-api] [nio-8080-exec-3] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:48.012Z ERROR 4211 --- [orders-api] [nio-8080-exec-4] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:13:52.013Z ERROR 4211 --- [orders-api] [nio-8080-exec-5] o.a.c.c.C.[.[.[/].[dispatcherServlet]    : Servlet.service() for servlet [dispatcherServlet] threw exception
+org.springframework.dao.DataAccessResourceFailureException: Unable to acquire JDBC Connection
+	at org.springframework.orm.jpa.vendor.HibernateJpaDialect.convertHibernateAccessException(HibernateJpaDialect.java:275)
+	at com.abhijeet.orders.service.OrderService.findOrder(OrderService.java:58)
+Caused by: java.sql.SQLTransientConnectionException: HikariPool-1 - Connection is not available, request timed out after 30000ms.
+	... 87 common frames omitted
+2026-11-12T09:20:10.400Z ERROR 4211 --- [orders-api] [nio-8080-exec-2] c.a.orders.web.ApiExceptionHandler      : Unhandled error: java.lang.NullPointerException: Cannot invoke "Customer.getId()" because "customer" is null
+2026-11-12T09:20:19.400Z ERROR 4211 --- [orders-api] [nio-8080-exec-2] c.a.orders.web.ApiExceptionHandler      : Unhandled error: java.lang.NullPointerException: Cannot invoke "Customer.getId()" because "customer" is null
+2026-11-12T09:20:28.400Z ERROR 4211 --- [orders-api] [nio-8080-exec-2] c.a.orders.web.ApiExceptionHandler      : Unhandled error: java.lang.NullPointerException: Cannot invoke "Customer.getId()" because "customer" is null
+2026-11-12T09:25:00.002Z  INFO 4211 --- [orders-api] [           main] c.a.orders.OrdersApplication            : Started OrdersApplication in 4.2 seconds

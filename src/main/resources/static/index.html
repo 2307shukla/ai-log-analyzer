@@ -47,6 +47,10 @@
   .btn.alt { background: #fffdf5; border: 1.5px solid var(--accent); color: var(--text); }
   .btn:disabled { opacity: .45; cursor: default; }
   .src { font-size: 13px; color: var(--muted); }
+  .select { padding: 8px 10px; border-radius: 9px; border: 1.5px solid #ca8a04; background: #fff; font: inherit; color: var(--text); }
+  .fmt { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .fmt .main { background: var(--accent); color: #fde047; font-weight: 800; padding: 4px 12px; border-radius: 999px; font-size: 13px; }
+  .fmt .part { background: var(--well); border: 1px solid #eab308; padding: 2px 10px; border-radius: 999px; font-size: 12px; color: #44403c; }
   .src b { color: var(--text); }
 
   .gauge { text-align: center; }
@@ -118,14 +122,24 @@
   <div class="panel" style="margin-top:18px">
     <div class="drop" id="drop" role="button" tabindex="0" aria-label="Choose a log file to upload">
       <div><strong>Drop a log here</strong> or click to choose a file</div>
-      <div class="muted">Apache/Nginx access log, SSH auth log, or JSON lines &middot; up to 10 MB &middot; private to your session</div>
-      <input type="file" id="file" accept=".log,.txt,.json,.jsonl">
+      <div class="muted">Format is detected automatically: Apache/Nginx, SSH auth, Spring Boot / Java, Windows Security events, AWS CloudTrail, UFW / iptables, Linux syslog, Docker / Kubernetes &middot; up to 5 MB (longer logs are sampled) &middot; private to your session</div>
+      <input type="file" id="file" accept=".log,.txt,.json,.jsonl,.csv,.out">
     </div>
     <div class="row" style="margin-top:14px">
       <button class="btn" id="analyze">Analyze with AI</button>
       <a class="btn alt" href="/api/logs/export?format=md">Export report (.md)</a>
       <a class="btn alt" href="/api/logs/export?format=json">Export (.json)</a>
       <span class="src" id="src"></span>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="muted" for="formatSelect">Format:</label>
+      <select id="formatSelect" class="select" aria-label="Log format override"><option value="auto">Auto-detect</option></select>
+      <span class="muted" id="sampledNote"></span>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="muted" for="sample">Or try a sample:</label>
+      <select id="sample" class="select" aria-label="Sample log"></select>
+      <button class="btn alt" id="loadSample" type="button">Load sample</button>
     </div>
   </div>
 
@@ -153,6 +167,8 @@
 
   <div class="panel muted">
     <div><code>POST /api/logs/chat</code> &mdash; JSON <code>{"question": "...", "history": [...]}</code>; AI answer grounded in the findings</div>
+    <div><code>GET /api/logs/formats</code> &middot; <code>POST /api/logs/format?format=…</code> &mdash; list formats, re-read the loaded log with a manual override</div>
+    <div><code>GET /api/logs/samples</code> &middot; <code>POST /api/logs/samples/{id}</code> &mdash; list and load the bundled example logs</div>
     <div><code>POST /api/logs/upload</code> &mdash; multipart field <code>file</code></div>
     <div><code>GET /api/logs/summary</code> &mdash; findings, risk score, timeline; no AI call</div>
     <div><code>GET /api/logs/analyze</code> &mdash; summary plus the LLM report</div>
@@ -204,6 +220,14 @@
       + '<div class="kpi" style="grid-column: 1 / -1"><div class="k">Period</div><div class="v small">' + period + '</div></div>'
       + '</div>';
   }
+  function formats(s) {
+    const parts = Object.keys(s.formats || {});
+    const breakdown = parts.length > 1
+      ? parts.map(k => '<span class="part">' + esc(k) + ' &middot; ' + num(s.formats[k]) + '</span>').join('') : '';
+    return '<div class="fmt"><span class="muted">Detected format</span><span class="main">'
+      + esc(s.detectedFormat || 'Unknown') + '</span>' + breakdown + '</div>';
+  }
+
   function kpi(label, value) { return '<div class="kpi"><div class="k">' + label + '</div><div class="v">' + value + '</div></div>'; }
 
   function findings(list) {
@@ -279,7 +303,7 @@
     if (!s) { dash.innerHTML = '<div class="panel muted">' + esc(data.message || 'No log loaded.') + '</div>'; return; }
     srcEl.innerHTML = 'Showing: <b>' + esc(data.file || 'log') + '</b>';
     dash.innerHTML =
-      '<div class="panel"><div class="grid2">' + gauge(s.riskScore, s.riskLevel) + kpis(s) + '</div></div>'
+      '<div class="panel">' + formats(s) + '<div class="grid2">' + gauge(s.riskScore, s.riskLevel) + kpis(s) + '</div></div>'
       + '<div class="panel"><h2>Findings</h2>' + findings(s.findings) + '</div>'
       + '<div class="panel"><h2>Requests over time</h2>' + timeline(s.timeline, s.timelineBucketMinutes) + '</div>'
       + '<div class="grid3"><div class="panel"><h2>Top sources</h2>' + bars(s.topIps, 'No source addresses found.') + '</div>'
@@ -319,13 +343,30 @@
     return data;
   }
 
+  const MAX_BYTES = 5 * 1024 * 1024;
+  const formatSelect = document.getElementById('formatSelect');
+  const sampledNote = document.getElementById('sampledNote');
+
+  function noteSampling(data) {
+    sampledNote.textContent = data && data.sampled
+      ? 'Large file: analysed the first ' + num(data.loaded).toLocaleString() + ' of ' + num(data.totalLines).toLocaleString() + ' lines.'
+      : '';
+  }
+
   async function upload(file) {
     if (!file) return;
+    if (file.size > MAX_BYTES) {
+      reportEl.innerHTML = '<span class="err">That file is ' + (file.size / 1048576).toFixed(1) + ' MB. The limit is 5 MB; upload a shorter excerpt.</span>';
+      return;
+    }
     reportEl.innerHTML = '<span class="muted">Parsing&hellip;</span>';
     try {
       const form = new FormData();
       form.append('file', file);
-      render(await request('/api/logs/upload', { method: 'POST', body: form }));
+      form.append('format', formatSelect.value);
+      const data = await request('/api/logs/upload', { method: 'POST', body: form });
+      render(data);
+      noteSampling(data);
       history.length = 0;
       chatEl.innerHTML = '<div class="msg bot">New log loaded. Ask me about it.</div>';
       reportEl.innerHTML = '<span class="muted">Loaded ' + esc(file.name) + '. Press <b>Analyze with AI</b> for the incident report.</span>';
@@ -398,6 +439,43 @@
   askForm.addEventListener('submit', e => { e.preventDefault(); ask(questionEl.value); });
   document.getElementById('suggest').addEventListener('click', e => {
     if (e.target.tagName === 'BUTTON') ask(e.target.textContent);
+  });
+
+  // ------------------------------------------------------------ format override
+
+  request('/api/logs/formats').then(list => {
+    formatSelect.innerHTML = list.map(x => '<option value="' + esc(x.id) + '">' + esc(x.label) + '</option>').join('');
+  }).catch(() => {});
+
+  formatSelect.addEventListener('change', async () => {
+    try {
+      const data = await request('/api/logs/format?format=' + encodeURIComponent(formatSelect.value), { method: 'POST' });
+      render(data);
+      noteSampling(data);
+    } catch (e) {
+      reportEl.innerHTML = '<span class="err">Could not apply that format: ' + esc(e.message) + '</span>';
+    }
+  });
+
+  // ----------------------------------------------------------------- samples
+
+  const sampleSelect = document.getElementById('sample');
+  request('/api/logs/samples').then(list => {
+    sampleSelect.innerHTML = list.map(x => '<option value="' + esc(x.id) + '">' + esc(x.name) + '</option>').join('');
+  }).catch(() => { sampleSelect.disabled = true; });
+
+  document.getElementById('loadSample').addEventListener('click', async () => {
+    if (!sampleSelect.value) return;
+    try {
+      render(await request('/api/logs/samples/' + encodeURIComponent(sampleSelect.value), { method: 'POST' }));
+      formatSelect.value = 'auto';
+      noteSampling(null);
+      history.length = 0;
+      chatEl.innerHTML = '<div class="msg bot">Sample loaded. Ask me about it.</div>';
+      reportEl.innerHTML = '<span class="muted">Sample loaded. Press <b>Analyze with AI</b> for the incident report.</span>';
+    } catch (e) {
+      reportEl.innerHTML = '<span class="err">Could not load the sample: ' + esc(e.message) + '</span>';
+    }
   });
 
   request('/api/logs/summary').then(render).catch(e => {

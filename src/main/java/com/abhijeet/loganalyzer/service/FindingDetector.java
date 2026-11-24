@@ -66,17 +66,17 @@ public class FindingDetector {
         passwordSpraying(events, findings);
         compromisedLogin(events, findings);
         pathAttack(events, findings, "SQL_INJECTION", "SQL injection attempts", Severity.HIGH,
-                "T1190 Exploit Public-Facing Application", SQLI,
+                MitreMapping.technique("SQL_INJECTION"), SQLI,
                 "Requests carried SQL syntax in the URL. Confirm the application uses parameterised "
                         + "queries and check these requests for 200 responses.",
                 "Use parameterised queries, validate input server side, and put a WAF rule in front "
                         + "of the affected endpoints.");
         pathAttack(events, findings, "XSS", "Cross-site scripting attempts", Severity.MEDIUM,
-                "T1190 Exploit Public-Facing Application", XSS,
+                MitreMapping.technique("XSS"), XSS,
                 "Requests carried script or event-handler payloads in the URL.",
                 "Encode output by context, set a Content-Security-Policy, and sanitise stored input.");
         pathAttack(events, findings, "PATH_TRAVERSAL", "Path traversal attempts", Severity.HIGH,
-                "T1190 Exploit Public-Facing Application", TRAVERSAL,
+                MitreMapping.technique("PATH_TRAVERSAL"), TRAVERSAL,
                 "Requests tried to climb out of the web root or read system files.",
                 "Normalise and validate file paths, never build paths from user input, and run the "
                         + "service with minimal file system permissions.");
@@ -86,6 +86,7 @@ public class FindingDetector {
         serverErrors(events, findings);
         trafficConcentration(events, findings);
         requestBurst(events, findings);
+        PlatformRules.detect(events, findings);
 
         findings.sort(Comparator
                 .comparing((Finding f) -> f.severity().ordinal())
@@ -155,7 +156,7 @@ public class FindingDetector {
 
         Severity severity = worst >= 50 ? Severity.CRITICAL : worst >= 10 ? Severity.HIGH : Severity.MEDIUM;
         out.add(new Finding("BRUTE_FORCE", "Brute-force login attempts", severity,
-                "T1110 Brute Force", total,
+                MitreMapping.technique("BRUTE_FORCE"), total,
                 "One or more addresses failed authentication repeatedly, which is the pattern of "
                         + "automated password guessing.",
                 top(evidence),
@@ -188,7 +189,7 @@ public class FindingDetector {
         }
 
         out.add(new Finding("PASSWORD_SPRAYING", "Account enumeration or password spraying",
-                Severity.HIGH, "T1110.003 Password Spraying", total,
+                Severity.HIGH, MitreMapping.technique("PASSWORD_SPRAYING"), total,
                 "A single address attempted many different account names, which points to guessing "
                         + "which accounts exist rather than attacking one.",
                 top(evidence),
@@ -219,7 +220,7 @@ public class FindingDetector {
         }
 
         out.add(new Finding("COMPROMISED_LOGIN", "Successful login after repeated failures",
-                Severity.CRITICAL, "T1078 Valid Accounts", count,
+                Severity.CRITICAL, MitreMapping.technique("COMPROMISED_LOGIN"), count,
                 "An address that failed to authenticate several times then succeeded. This is the "
                         + "strongest sign that a guessed credential worked.",
                 top(evidence),
@@ -273,7 +274,7 @@ public class FindingDetector {
 
         int worst = byIp.values().stream().mapToInt(Integer::intValue).max().orElse(0);
         out.add(new Finding("SENSITIVE_PATH_PROBING", "Probing for sensitive files and admin pages",
-                worst >= 10 ? Severity.HIGH : Severity.MEDIUM, "T1595.003 Wordlist Scanning", count,
+                worst >= 10 ? Severity.HIGH : Severity.MEDIUM, MitreMapping.technique("SENSITIVE_PATH_PROBING"), count,
                 "Requests targeted well-known sensitive locations such as environment files, version "
                         + "control folders and admin panels. Sources: " + byIp.size() + ".",
                 top(evidence),
@@ -305,7 +306,7 @@ public class FindingDetector {
         List<String> evidence = new ArrayList<>();
         seen.forEach((who, n) -> evidence.add(who + " (" + n + " requests)"));
         out.add(new Finding("SCANNER_USER_AGENT", "Known security scanner detected", Severity.MEDIUM,
-                "T1595.002 Vulnerability Scanning", count,
+                MitreMapping.technique("SCANNER_USER_AGENT"), count,
                 "Requests identified themselves as a known scanning or exploitation tool.",
                 top(evidence),
                 "Block these user agents at the edge and check whether the scan found anything "
@@ -333,7 +334,7 @@ public class FindingDetector {
         }
 
         out.add(new Finding("FORCED_BROWSING", "Directory or file enumeration", Severity.MEDIUM,
-                "T1595.003 Wordlist Scanning", total,
+                MitreMapping.technique("FORCED_BROWSING"), total,
                 "One address requested many different pages that do not exist, which is how content "
                         + "discovery tools work.",
                 top(evidence),
@@ -364,13 +365,19 @@ public class FindingDetector {
 
     private void trafficConcentration(List<LogEvent> events, List<Finding> out) {
         Map<String, Integer> byIp = new LinkedHashMap<>();
+        int requests = 0;
         for (LogEvent e : events) {
+            // Web requests only: for audit, firewall and app logs a busy address is normal.
+            if (e.method() == null && e.status() == null) {
+                continue;
+            }
+            requests++;
             if (e.ip() != null) {
                 byIp.merge(e.ip(), 1, Integer::sum);
             }
         }
 
-        int threshold = Math.max(10, events.size() / 3);
+        int threshold = Math.max(10, requests / 3);
         List<String> evidence = new ArrayList<>();
         int total = 0;
         for (Map.Entry<String, Integer> entry : byIp.entrySet()) {
@@ -395,7 +402,8 @@ public class FindingDetector {
         Map<Long, Integer> perMinute = new TreeMap<>();
         int timed = 0;
         for (LogEvent e : events) {
-            if (e.timestamp() != null) {
+            // Only requests count: an application log writes many lines per request.
+            if (e.timestamp() != null && (e.method() != null || e.status() != null)) {
                 perMinute.merge(e.timestamp().getEpochSecond() / 60, 1, Integer::sum);
                 timed++;
             }
@@ -421,7 +429,7 @@ public class FindingDetector {
         }
 
         out.add(new Finding("REQUEST_BURST", "Sudden spike in request rate",
-                peak >= 100 ? Severity.HIGH : Severity.MEDIUM, "T1498 Network Denial of Service", peak,
+                peak >= 100 ? Severity.HIGH : Severity.MEDIUM, MitreMapping.technique("REQUEST_BURST"), peak,
                 "The busiest minute had far more requests than the typical minute, which can indicate "
                         + "a flood or an automated tool.",
                 List.of("Peak of " + peak + " requests in the minute starting "
@@ -433,6 +441,9 @@ public class FindingDetector {
     // ----------------------------------------------------------------- helpers
 
     private static boolean isSuccess(LogEvent e) {
+        if (e.is("logon_success") || e.is("console_login") || e.is("console_login_no_mfa")) {
+            return true;
+        }
         String raw = e.raw() == null ? "" : e.raw().toLowerCase(Locale.ROOT);
         return SUCCESS_MARKERS.stream().anyMatch(raw::contains);
     }
@@ -473,7 +484,7 @@ public class FindingDetector {
     }
 
     /** Keeps evidence short and printable, since it comes straight from untrusted log text. */
-    private static String clip(String value) {
+    static String clip(String value) {
         StringBuilder clean = new StringBuilder();
         for (int i = 0; i < value.length() && clean.length() < EVIDENCE_WIDTH; i++) {
             char c = value.charAt(i);
@@ -482,7 +493,7 @@ public class FindingDetector {
         return value.length() > EVIDENCE_WIDTH ? clean + "..." : clean.toString();
     }
 
-    private static List<String> top(List<String> evidence) {
+    static List<String> top(List<String> evidence) {
         return evidence.stream().distinct().limit(EVIDENCE_LIMIT).toList();
     }
 

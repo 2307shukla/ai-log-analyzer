@@ -19,6 +19,8 @@ import java.util.Map;
  * @param lastSeen              latest timestamp in the log, ISO-8601 UTC, or null
  * @param uniqueIps             number of distinct source addresses
  * @param topUserAgents         most common user agents
+ * @param formats               recognised lines per detected format, most common first
+ * @param detectedFormat        the dominant format, or "Mixed: A, B" when no format dominates
  */
 public record LogSummary(
         int totalLines,
@@ -37,13 +39,15 @@ public record LogSummary(
         String firstSeen,
         String lastSeen,
         int uniqueIps,
-        Map<String, Integer> topUserAgents
+        Map<String, Integer> topUserAgents,
+        Map<String, Integer> formats,
+        String detectedFormat
 ) {
 
     /** Same summary without the timeline, used for the AI prompt to keep it small. */
     public LogSummary withoutTimeline() {
         return new LogSummary(totalLines, parsedEvents, topIps, statusClasses, topPaths,
                 authFailuresByIp, suspiciousPaths, signals, riskScore, riskLevel, findings,
-                List.of(), timelineBucketMinutes, firstSeen, lastSeen, uniqueIps, topUserAgents);
+                List.of(), timelineBucketMinutes, firstSeen, lastSeen, uniqueIps, topUserAgents, formats, detectedFormat);
     }
 }

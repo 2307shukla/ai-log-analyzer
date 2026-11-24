@@ -2,11 +2,13 @@ package com.abhijeet.loganalyzer.controller;
 
 import com.abhijeet.loganalyzer.model.ChatRequest;
 import com.abhijeet.loganalyzer.model.LogEvent;
+import com.abhijeet.loganalyzer.model.LogFormat;
 import com.abhijeet.loganalyzer.service.LogAnalysisService;
 import com.abhijeet.loganalyzer.service.LogParser;
 import com.abhijeet.loganalyzer.service.LogStore;
 import com.abhijeet.loganalyzer.model.LogSummary;
 import com.abhijeet.loganalyzer.service.ReportExporter;
+import com.abhijeet.loganalyzer.service.SampleCatalog;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,6 +18,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,47 +37,144 @@ import java.util.Map;
 @RequestMapping("/api/logs")
 public class LogController {
 
-    /** Upper bound on parsed lines per upload, so a few uploads cannot exhaust memory. */
+    /** Lines analysed per upload; longer files are sampled (first lines) so memory stays bounded. */
     static final int MAX_LINES = 100_000;
 
     private final LogParser parser;
     private final LogAnalysisService analysisService;
     private final LogStore store;
+    private final SampleCatalog samples;
 
-    public LogController(LogParser parser, LogAnalysisService analysisService, LogStore store) {
+    public LogController(LogParser parser, LogAnalysisService analysisService, LogStore store,
+                         SampleCatalog samples) {
         this.parser = parser;
         this.analysisService = analysisService;
         this.store = store;
+        this.samples = samples;
     }
 
     /** Upload a log file. Parsing is deterministic - no AI call, so this is instant and free. */
-    @Operation(summary = "Upload a log (Apache/Nginx, SSH auth, or JSON lines); kept private to your session")
+    @Operation(summary = "Upload a log of any supported format; detected automatically unless format is given. "
+            + "Kept private to your session. Maximum 5 MB; files over 100,000 lines are sampled.")
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file,
+                                                      @RequestParam(defaultValue = "auto") String format,
                                                       HttpServletRequest request)
             throws IOException {
+        LogFormat forced;
+        try {
+            forced = format(format);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
 
         String content = new String(file.getBytes(), StandardCharsets.UTF_8);
-        List<LogEvent> events = parser.parse(content);
+        LogParser.ParseResult parsed = parser.parse(content, forced, MAX_LINES);
 
-        if (events.isEmpty()) {
+        if (parsed.events().isEmpty()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "No usable log lines found in the uploaded file."));
         }
 
-        if (events.size() > MAX_LINES) {
-            return ResponseEntity.status(413)
-                    .body(Map.of("error", "Log too large. Maximum is " + MAX_LINES + " lines."));
+        String sessionId = request.getSession(true).getId();
+        store.set(sessionId, file.getOriginalFilename(), parsed.events());
+        return ResponseEntity.ok(loaded(store.name(sessionId), parsed, forced));
+    }
+
+    /** The formats the parser knows, for the manual override. */
+    @Operation(summary = "List the log formats that can be detected or forced")
+    @GetMapping("/formats")
+    public List<Map<String, String>> formats() {
+        List<Map<String, String>> list = new java.util.ArrayList<>();
+        list.add(Map.of("id", "auto", "label", "Auto-detect"));
+        for (LogFormat f : LogFormat.values()) {
+            if (f != LogFormat.UNKNOWN) {
+                list.add(Map.of("id", f.name().toLowerCase(java.util.Locale.ROOT), "label", f.label()));
+            }
         }
+        return list;
+    }
+
+    /**
+     * Re-reads the loaded log as the given format (or auto-detects again). Visitors looking at the
+     * bundled sample get their own copy, so the override never affects anyone else.
+     */
+    @Operation(summary = "Re-parse the loaded log with a manual format override (format=auto to detect again)")
+    @PostMapping("/format")
+    public ResponseEntity<Map<String, Object>> override(@RequestParam String format, HttpServletRequest request) {
+        LogFormat forced;
+        try {
+            forced = format(format);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+        String current = sessionId(request);
+        if (store.isEmpty(current)) {
+            return ResponseEntity.ok(Map.of("message", "No log loaded. Upload a file to begin."));
+        }
+        String name = store.name(current);
+        StringBuilder raw = new StringBuilder();
+        for (LogEvent e : store.get(current)) {
+            raw.append(e.raw()).append('\n');
+        }
+        LogParser.ParseResult parsed = parser.parse(raw.toString(), forced, MAX_LINES);
 
         String sessionId = request.getSession(true).getId();
-        store.set(sessionId, file.getOriginalFilename(), events);
+        store.set(sessionId, name, parsed.events());
+        return ResponseEntity.ok(loaded(name, parsed, forced));
+    }
 
+    private Map<String, Object> loaded(String name, LogParser.ParseResult parsed, LogFormat forced) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("file", store.name(sessionId));
-        body.put("loaded", events.size());
-        body.put("summary", analysisService.summarize(events));
-        return ResponseEntity.ok(body);
+        body.put("file", name);
+        body.put("loaded", parsed.events().size());
+        body.put("totalLines", parsed.totalLines());
+        body.put("sampled", parsed.truncated());
+        body.put("format", forced == null ? "auto" : forced.name().toLowerCase(java.util.Locale.ROOT));
+        body.put("summary", analysisService.summarize(parsed.events()));
+        return body;
+    }
+
+    /** "auto" means detect per line; anything else must name a format. */
+    static LogFormat format(String value) {
+        if (value == null || value.isBlank() || "auto".equalsIgnoreCase(value)) {
+            return null;
+        }
+        try {
+            LogFormat f = LogFormat.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+            if (f == LogFormat.UNKNOWN) {
+                throw new IllegalArgumentException();
+            }
+            return f;
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown format. Use auto or one of: " + java.util.Arrays.stream(LogFormat.values())
+                    .filter(f -> f != LogFormat.UNKNOWN).map(f -> f.name().toLowerCase(java.util.Locale.ROOT))
+                    .collect(java.util.stream.Collectors.joining(", ")) + ".");
+        }
+    }
+
+    /** The bundled example logs, one per supported format. */
+    @Operation(summary = "List the bundled sample logs")
+    @GetMapping("/samples")
+    public List<SampleCatalog.Info> samples() {
+        return samples.list();
+    }
+
+    /** Loads a bundled sample into the caller's session, as if they had uploaded it. */
+    @Operation(summary = "Load a bundled sample log into your session")
+    @PostMapping("/samples/{id}")
+    public ResponseEntity<Map<String, Object>> loadSample(@PathVariable String id, HttpServletRequest request) {
+        return samples.get(id)
+                .map(sample -> {
+                    String sessionId = request.getSession(true).getId();
+                    store.set(sessionId, sample.file(), sample.events());
+                    Map<String, Object> body = new LinkedHashMap<>();
+                    body.put("file", sample.file());
+                    body.put("loaded", sample.events().size());
+                    body.put("summary", analysisService.summarize(sample.events()));
+                    return ResponseEntity.ok(body);
+                })
+                .orElseGet(() -> ResponseEntity.status(404).body(Map.of("error", "Unknown sample.")));
     }
 
     /** Statistics only - no AI call, no quota used. */

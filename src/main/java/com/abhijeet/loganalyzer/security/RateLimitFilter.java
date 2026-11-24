@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>{@code /api/logs/analyze} calls the AI provider. Without a limit, a script could
  *       burn the whole free Gemini quota in minutes and take the demo down. It has a
  *       per-client limit and a global limit across all clients.</li>
- *   <li>{@code /api/logs/upload} parses up to 10MB into memory, so it has a per-client limit.</li>
+ *   <li>{@code /api/logs/upload} parses up to 5MB into memory, so it has a per-client limit.</li>
  * </ul>
  *
  * The global limit is the one that guarantees the provider quota is safe, even if a caller
@@ -52,7 +52,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
         boolean allowed = true;
         if ("/api/logs/analyze".equals(uri) || "/api/logs/chat".equals(uri)) {
             allowed = take(analyzeBuckets, ANALYZE_PER_CLIENT, client) && analyzeGlobal.tryConsume(1);
-        } else if ("/api/logs/upload".equals(uri)) {
+        } else if ("/api/logs/upload".equals(uri)
+                || "/api/logs/format".equals(uri)
+                || ("POST".equals(request.getMethod()) && uri.startsWith("/api/logs/samples/"))) {
             allowed = take(uploadBuckets, UPLOAD_PER_CLIENT, client);
         }
 
