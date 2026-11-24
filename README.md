@@ -2,7 +2,7 @@
 
 An AI-assisted security log analyzer built with **Spring Boot 3** and **Spring AI**, running on **Google Gemini's free tier**.
 
-Upload an Apache/Nginx access log or an SSH auth log. The app detects attack patterns deterministically, then has an LLM write a readable incident report with remediation advice.
+Upload an Apache/Nginx access log, an SSH auth log, or JSON-lines logs. The app detects attack patterns deterministically, scores the risk, maps each finding to **MITRE ATT&CK**, draws a request timeline, then has an LLM write a readable incident report. Reports can be downloaded as Markdown or JSON.
 
 **Live demo:** https://ai-log-analyzer-5l3n.onrender.com
 
@@ -25,13 +25,26 @@ The model reasons over verified numbers, never raw text. A 50 MB log is reduced 
 
 ## Detection rules
 
-All implemented locally in [`LogAnalysisService`](src/main/java/com/abhijeet/loganalyzer/service/LogAnalysisService.java):
+All implemented locally in [`FindingDetector`](src/main/java/com/abhijeet/loganalyzer/service/FindingDetector.java). Every finding carries a severity, a MITRE ATT&CK technique where one applies, a count, up to five pieces of evidence, and a concrete recommendation.
 
-- **Brute force** — 3+ failed authentications from one IP
-- **Injection attempts** — SQL keywords, `'`, `<script`, `../`, `/etc/passwd`
-- **Scanner probes** — `.env`, `.git`, `wp-login`, `phpmyadmin`, `/admin`
-- **Server errors** — clustered 5xx responses
-- **Traffic concentration** — one IP producing a third of all requests
+| Rule | Severity | MITRE ATT&CK | Fires when |
+|---|---|---|---|
+| `COMPROMISED_LOGIN` | CRITICAL | T1078 Valid Accounts | An address logs in successfully after 3+ failures |
+| `BRUTE_FORCE` | MEDIUM / HIGH / CRITICAL | T1110 Brute Force | 3+ failed logins from one address (HIGH at 10, CRITICAL at 50) |
+| `PASSWORD_SPRAYING` | HIGH | T1110.003 Password Spraying | One address tries 5+ different account names |
+| `SQL_INJECTION` | HIGH | T1190 Exploit Public-Facing Application | SQL syntax in the URL, including URL-encoded forms |
+| `PATH_TRAVERSAL` | HIGH | T1190 | `../`, `/etc/passwd` and similar in the URL |
+| `XSS` | MEDIUM | T1190 | Script or event-handler payloads in the URL |
+| `SENSITIVE_PATH_PROBING` | MEDIUM / HIGH | T1595.003 Wordlist Scanning | Requests for `.env`, `.git`, `wp-login`, `phpmyadmin`, admin panels (HIGH when one address makes 10+) |
+| `SCANNER_USER_AGENT` | MEDIUM | T1595.002 Vulnerability Scanning | Known scanner user agents such as sqlmap or nikto |
+| `FORCED_BROWSING` | MEDIUM | T1595.003 | One address hits 10+ different pages that return 404 |
+| `SERVER_ERRORS` | MEDIUM / HIGH | | 3+ responses with a 5xx status (HIGH at 20) |
+| `REQUEST_BURST` | MEDIUM / HIGH | T1498 Network Denial of Service | Busiest minute is at least 5x the median and at least 20 requests; needs timestamps and 30+ timed events |
+| `TRAFFIC_CONCENTRATION` | LOW | | One address produces a third of all requests |
+
+**Risk score.** Each finding adds its severity weight (CRITICAL 40, HIGH 25, MEDIUM 12, LOW 4), capped at 100. The overall level is the higher of the score band (70+ CRITICAL, 40+ HIGH, 15+ MEDIUM, otherwise LOW) and the most serious single finding, so one critical issue is never hidden behind a low total. A log with no findings is `CLEAN`.
+
+Everything that came from the log is untrusted text. Evidence is clipped, stripped of control characters, and escaped wherever it is rendered (dashboard and Markdown export).
 
 ---
 
@@ -42,8 +55,9 @@ All implemented locally in [`LogAnalysisService`](src/main/java/com/abhijeet/log
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/logs/upload` | Upload a log (multipart field `file`) |
-| `GET` | `/api/logs/summary` | Statistics only — **no AI call, no quota used** |
-| `GET` | `/api/logs/analyze` | Statistics plus the LLM report |
+| `GET` | `/api/logs/summary` | Findings, risk score, timeline and statistics — **no AI call, no quota used** |
+| `GET` | `/api/logs/analyze` | Everything in summary plus the LLM incident report |
+| `GET` | `/api/logs/export?format=md\|json` | Downloadable report built from the findings — **no AI call** |
 | `GET` | `/actuator/health` | Liveness/readiness probe (used by Render) |
 
 Each visitor's upload is private to their browser session. Visitors who have not uploaded anything see the bundled sample log.
@@ -54,6 +68,7 @@ Each visitor's upload is private to their browser session. Visitors who have not
 curl -X POST "https://ai-log-analyzer-5l3n.onrender.com/api/logs/upload" -F "file=@access.log"
 curl "https://ai-log-analyzer-5l3n.onrender.com/api/logs/summary"
 curl "https://ai-log-analyzer-5l3n.onrender.com/api/logs/analyze"
+curl -OJ "https://ai-log-analyzer-5l3n.onrender.com/api/logs/export?format=md"
 ```
 
 The analyze endpoint returns both halves:
@@ -61,7 +76,16 @@ The analyze endpoint returns both halves:
 ```json
 {
   "file": "sample.log",
-  "summary": { "totalLines": 56, "signals": ["Brute-force pattern: 9 failed authentications from 203.0.113.5"] },
+  "summary": {
+    "riskScore": 100,
+    "riskLevel": "CRITICAL",
+    "findings": [
+      { "rule": "COMPROMISED_LOGIN", "severity": "CRITICAL", "mitre": "T1078 Valid Accounts",
+        "evidence": ["203.0.113.5 logged in as admin after 9 failed attempts"], "recommendation": "..." }
+    ],
+    "timeline": [{ "start": "2026-11-12T03:15:00Z", "requests": 14, "errors": 12 }],
+    "timelineBucketMinutes": 15
+  },
   "report": "## Executive summary\n..."
 }
 ```
@@ -70,8 +94,9 @@ The analyze endpoint returns both halves:
 
 ## Supported log formats
 
-- **Apache / Nginx combined** — `IP - - [date] "METHOD path HTTP/1.1" status bytes "referer" "ua"`
-- **SSH auth logs** — lines containing `Failed password`, `Invalid user`, `authentication failure`
+- **Apache / Nginx combined** — `IP - - [date] "METHOD path HTTP/1.1" status bytes "referer" "ua"`; the timestamp and its UTC offset are read
+- **SSH auth logs** — `Failed password`, `Accepted password/publickey`, `Invalid user`, `authentication failure`; the account name is extracted, and the year (syslog omits it) is taken from other dated lines in the file or the current year
+- **JSON lines** — one object per line, with common key names for address, path, status, user agent and time (ISO-8601 or epoch), so Nginx/Caddy/app JSON logs work as they are
 
 Unrecognised lines are never dropped — they are kept with their raw text and any IP found, so the parser degrades instead of failing.
 
@@ -134,12 +159,17 @@ Environment variables:
 ./mvnw test
 ```
 
-**29 tests**, covering the detection pipeline and the production hardening:
+**66 tests**, covering the detection pipeline, the report features and the production hardening:
 
 | Test class | Covers |
 |---|---|
 | `LogParserTest` | Apache combined and SSH auth formats, unrecognised lines, empty input |
 | `LogAnalysisServiceTest` | Brute-force threshold, injection/scanner paths, 5xx clustering, traffic concentration, clean traffic, status bucketing |
+| `LogParserFormatsTest` | Apache timestamps and UTC offsets, syslog year inference, account extraction, JSON lines (ISO, epoch, string status), malformed JSON fallback |
+| `FindingDetectorTest` | Every rule and its thresholds, severity escalation, no false positive on clean or steady traffic, risk-score cap and bands, sort order, untrusted evidence is bounded and printable |
+| `TimelineTest` | Bucketing, gap filling, bucket size scaling with the time span, no timestamps means no timeline |
+| `ReportExporterTest` | Markdown content, clean-log message, log text cannot inject HTML or break tables, JSON export is valid |
+| `FeatureIntegrationTest` | Sample log yields the headline findings and a timeline, `.md` and `.json` downloads with fixed filenames, bad format returns 400, exports use the caller's own upload |
 | `RateLimitFilterTest` | Per-client and global limits, forged `X-Forwarded-For` cannot evade the limit, upload limit |
 | `LogStoreTest` | Uploads isolated per session, sample fallback, bounded memory |
 | `SessionIsolationIntegrationTest` | One visitor's upload is never visible to another; health endpoint and security headers |
@@ -176,6 +206,7 @@ The `Dockerfile` caches Maven dependencies in a layer, so only your changed sour
 - **Free-tier cold start.** Render sleeps after ~15 minutes idle; the first request afterwards can take up to a minute.
 - **No authentication.** Public endpoint. Uploads are private per session, but do not upload confidential production logs to a shared demo.
 - **Detection is rule-based, not adaptive.** The LLM explains findings; it does not discover new attack classes.
+- **Time-based features need timestamps.** Logs without readable times still get every other rule, but no timeline and no burst detection.
 - **Rate limiting is per-instance.** Buckets live in memory; multiple instances would need Redis.
 - **Sample data is synthetic.** IPs use documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`).
 

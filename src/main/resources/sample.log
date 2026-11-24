@@ -53,3 +53,7 @@ Nov 12 03:20:35 web01 sshd[2417]: Failed password for invalid user ubuntu from 2
 Nov 12 03:20:40 web01 sshd[2418]: Failed password for invalid user postgres from 203.0.113.5 port 51322 ssh2
 Nov 12 03:20:44 web01 sshd[2419]: Failed password for invalid user admin from 203.0.113.5 port 51336 ssh2
 Nov 12 03:21:02 web01 sshd[2420]: Accepted publickey for deploy from 192.168.1.31 port 51400 ssh2
+Nov 12 03:22:07 web01 sshd[2422]: Accepted password for admin from 203.0.113.5 port 51420 ssh2
+{"time":"2026-11-12T08:15:02Z","remote_addr":"198.51.100.77","method":"GET","uri":"/api/orders","status":200,"user_agent":"curl/8.4.0"}
+{"time":"2026-11-12T08:15:09Z","remote_addr":"198.51.100.77","method":"GET","uri":"/api/orders/../../etc/passwd","status":400,"user_agent":"curl/8.4.0"}
+{"time":"2026-11-12T08:15:14Z","remote_addr":"198.51.100.77","method":"POST","uri":"/api/login","status":401,"user_agent":"python-requests/2.31"}
