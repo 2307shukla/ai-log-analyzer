@@ -71,4 +71,11 @@ class ExportIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().string(containsString("pdf, md, json or csv")));
     }
+
+    @Test
+    void missingFilesAre404NotServerErrors() throws Exception {
+        mockMvc.perform(get("/favicon.ico")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/no-such-page.html")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/favicon.svg")).andExpect(status().isOk());
+    }
 }
