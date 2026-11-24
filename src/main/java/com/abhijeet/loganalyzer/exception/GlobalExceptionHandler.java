@@ -35,6 +35,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body("Request body must be JSON.", null));
     }
 
+    /** A missing page or file is a plain 404, not a server error, and is not logged as one. */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> notFound(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body("Not found.", null));
+    }
+
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, Object>> tooLarge(MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)

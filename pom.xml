@@ -61,6 +61,13 @@
         </dependency>
 
         <!-- OpenAPI / Swagger UI - free, Apache 2.0 -->
+        <!-- PDF export (Apache-2.0) -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+
         <!-- Offline GeoIP reader for the DB-IP Lite database (Apache-2.0); no API calls -->
         <dependency>
             <groupId>com.maxmind.geoip2</groupId>

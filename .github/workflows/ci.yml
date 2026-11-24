@@ -31,6 +31,15 @@ jobs:
       - name: Build and run tests
         run: ./mvnw -B --no-transfer-progress verify
 
+      - name: Keep the sample PDF reports for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-samples
+          path: target/report-samples/
+          if-no-files-found: ignore
+          retention-days: 14
+
   docker:
     name: Build Docker image
     runs-on: ubuntu-latest
