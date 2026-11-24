@@ -71,4 +71,12 @@ class RateLimitFilterTest {
         assertEquals("10.0.0.1", RateLimitFilter.clientKey(null, "10.0.0.1"));
         assertEquals("10.0.0.1", RateLimitFilter.clientKey("  ", "10.0.0.1"));
     }
+
+    @Test
+    void chatSharesTheAnalyzeBudgetBecauseBothCallTheModel() throws Exception {
+        for (int i = 0; i < RateLimitFilter.ANALYZE_PER_CLIENT; i++) {
+            assertEquals(200, call(i % 2 == 0 ? "/api/logs/chat" : "/api/logs/analyze", null, "10.7.7.7"));
+        }
+        assertEquals(429, call("/api/logs/chat", null, "10.7.7.7"));
+    }
 }

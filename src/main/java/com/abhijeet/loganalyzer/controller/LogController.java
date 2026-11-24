@@ -1,5 +1,6 @@
 package com.abhijeet.loganalyzer.controller;
 
+import com.abhijeet.loganalyzer.model.ChatRequest;
 import com.abhijeet.loganalyzer.model.LogEvent;
 import com.abhijeet.loganalyzer.service.LogAnalysisService;
 import com.abhijeet.loganalyzer.service.LogParser;
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -105,6 +107,29 @@ public class LogController {
         body.put("file", store.name(sessionId));
         body.put("summary", analysisService.summarize(events));
         body.put("report", analysisService.analyze(events));
+        return ResponseEntity.ok(body);
+    }
+
+    /** Ask a question about the loaded log. Answers are grounded in the computed summary. */
+    @Operation(summary = "Ask a question about the loaded log (AI call, rate limited)")
+    @PostMapping("/chat")
+    public ResponseEntity<Map<String, Object>> chat(@RequestBody ChatRequest chat, HttpServletRequest request) {
+        String question = chat == null ? null : chat.question();
+        if (question == null || question.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Type a question first."));
+        }
+        if (question.length() > LogAnalysisService.MAX_QUESTION) {
+            return ResponseEntity.badRequest().body(Map.of("error",
+                    "Question too long. Maximum is " + LogAnalysisService.MAX_QUESTION + " characters."));
+        }
+        String sessionId = sessionId(request);
+        if (store.isEmpty(sessionId)) {
+            return ResponseEntity.ok(Map.of("message", "No log loaded. Upload a file to begin."));
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("file", store.name(sessionId));
+        body.put("answer", analysisService.ask(store.get(sessionId), question, chat.history()));
         return ResponseEntity.ok(body);
     }
 

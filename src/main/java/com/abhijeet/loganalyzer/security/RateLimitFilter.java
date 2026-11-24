@@ -50,7 +50,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String client = clientKey(request.getHeader("X-Forwarded-For"), request.getRemoteAddr());
 
         boolean allowed = true;
-        if ("/api/logs/analyze".equals(uri)) {
+        if ("/api/logs/analyze".equals(uri) || "/api/logs/chat".equals(uri)) {
             allowed = take(analyzeBuckets, ANALYZE_PER_CLIENT, client) && analyzeGlobal.tryConsume(1);
         } else if ("/api/logs/upload".equals(uri)) {
             allowed = take(uploadBuckets, UPLOAD_PER_CLIENT, client);
