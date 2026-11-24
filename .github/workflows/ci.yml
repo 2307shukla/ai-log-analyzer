@@ -46,7 +46,7 @@ jobs:
         run: |
           docker run -d --name smoke -e AI_API_KEY=unset -p 8080:8080 ai-log-analyzer:ci
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/ > /dev/null; then
+            if curl -sf http://localhost:8080/actuator/health > /dev/null; then
               echo "Application responded"
               exit 0
             fi
