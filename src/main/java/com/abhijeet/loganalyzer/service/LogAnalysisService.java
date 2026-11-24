@@ -3,6 +3,7 @@ package com.abhijeet.loganalyzer.service;
 import com.abhijeet.loganalyzer.model.ChatTurn;
 import com.abhijeet.loganalyzer.model.Finding;
 import com.abhijeet.loganalyzer.model.LogEvent;
+import com.abhijeet.loganalyzer.model.LogFormat;
 import com.abhijeet.loganalyzer.model.LogSummary;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.model.ChatModel;
@@ -44,12 +45,16 @@ public class LogAnalysisService {
         Map<String, Integer> authFailures = new LinkedHashMap<>();
         Map<String, Integer> suspicious = new LinkedHashMap<>();
         Map<String, Integer> agentCounts = new LinkedHashMap<>();
+        Map<LogFormat, Integer> formatCounts = new java.util.EnumMap<>(LogFormat.class);
 
         int parsed = 0;
         Instant firstSeen = null;
         Instant lastSeen = null;
 
         for (LogEvent event : events) {
+            if (!event.is("stack_frame") && !event.is("caused_by")) {
+                formatCounts.merge(event.format(), 1, Integer::sum);
+            }
             if (event.ip() != null) {
                 ipCounts.merge(event.ip(), 1, Integer::sum);
                 parsed++;
@@ -132,7 +137,38 @@ public class LogAnalysisService {
                 firstSeen == null ? null : firstSeen.toString(),
                 lastSeen == null ? null : lastSeen.toString(),
                 ipCounts.size(),
-                top(agentCounts, TOP_AGENTS));
+                top(agentCounts, TOP_AGENTS),
+                formatLabels(formatCounts),
+                detectedFormat(formatCounts));
+    }
+
+    private static Map<String, Integer> formatLabels(Map<LogFormat, Integer> counts) {
+        Map<String, Integer> labels = new LinkedHashMap<>();
+        counts.entrySet().stream()
+                .sorted(Map.Entry.<LogFormat, Integer>comparingByValue().reversed())
+                .forEach(entry -> labels.put(entry.getKey().label(), entry.getValue()));
+        return labels;
+    }
+
+    /**
+     * The format most lines are in. Unrecognised lines only decide the answer when nothing was
+     * recognised; a file where no format reaches 80% of recognised lines is reported as mixed.
+     */
+    static String detectedFormat(Map<LogFormat, Integer> counts) {
+        Map<LogFormat, Integer> known = new LinkedHashMap<>(counts);
+        known.remove(LogFormat.UNKNOWN);
+        if (known.isEmpty()) {
+            return counts.isEmpty() ? "None" : LogFormat.UNKNOWN.label();
+        }
+        int total = known.values().stream().mapToInt(Integer::intValue).sum();
+        List<Map.Entry<LogFormat, Integer>> ranked = known.entrySet().stream()
+                .sorted(Map.Entry.<LogFormat, Integer>comparingByValue().reversed())
+                .toList();
+        if (ranked.get(0).getValue() * 5 >= total * 4) {
+            return ranked.get(0).getKey().label();
+        }
+        return "Mixed: " + ranked.stream().limit(3).map(e -> e.getKey().label())
+                .collect(Collectors.joining(", "));
     }
 
     private Map<String, Integer> top(Map<String, Integer> source, int max) {

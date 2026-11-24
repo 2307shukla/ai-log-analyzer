@@ -1,0 +1,16 @@
+2026-11-12T11:02:10Z Normal   Scheduled   pod/payments-7d9f8c6b5-x2k4p   Successfully assigned prod/payments-7d9f8c6b5-x2k4p to node-3
+2026-11-12T11:02:14Z Normal   Pulled      pod/payments-7d9f8c6b5-x2k4p   Container image "registry.example.com/payments:1.8.2" already present on machine
+2026-11-12T11:04:30Z Warning  BackOff     pod/payments-7d9f8c6b5-x2k4p   Back-off restarting failed container payments in pod payments-7d9f8c6b5-x2k4p
+2026-11-12T11:07:30Z Warning  BackOff     pod/payments-7d9f8c6b5-x2k4p   Back-off restarting failed container payments in pod payments-7d9f8c6b5-x2k4p
+2026-11-12T11:10:30Z Warning  BackOff     pod/payments-7d9f8c6b5-x2k4p   Back-off restarting failed container payments in pod payments-7d9f8c6b5-x2k4p
+2026-11-12T11:13:30Z Warning  BackOff     pod/payments-7d9f8c6b5-x2k4p   Back-off restarting failed container payments in pod payments-7d9f8c6b5-x2k4p
+2026-11-12T11:16:30Z Warning  BackOff     pod/payments-7d9f8c6b5-x2k4p   Back-off restarting failed container payments in pod payments-7d9f8c6b5-x2k4p
+2026-11-12T11:19:30Z Warning  BackOff     pod/payments-7d9f8c6b5-x2k4p   Back-off restarting failed container payments in pod payments-7d9f8c6b5-x2k4p
+2026-11-12T11:05:02Z Warning  Unhealthy   pod/payments-7d9f8c6b5-x2k4p   Liveness probe failed: HTTP probe failed with statuscode: 503
+2026-11-12T11:08:02Z Warning  Unhealthy   pod/payments-7d9f8c6b5-x2k4p   Readiness probe failed: Get "http://10.42.1.17:8080/actuator/health": context deadline exceeded
+2026-11-12T11:11:02Z Warning  Unhealthy   pod/payments-7d9f8c6b5-x2k4p   Liveness probe failed: HTTP probe failed with statuscode: 503
+Nov 12 11:20:41 node-2 kernel: [998812.120] Memory cgroup out of memory: Killed process 30211 (java) total-vm:4123456kB, anon-rss:1048576kB
+2026-11-12T11:20:42Z Warning  OOMKilling  pod/reports-5c6d8b7f9-qq8wm   Container reports was OOMKilled (limit 1Gi)
+2026-11-12T11:31:05Z Warning  Failed      pod/search-6b7c9d8e7-abcde   Failed to pull image "registry.example.com/search:2.0.0-rc1": not found
+2026-11-12T11:31:06Z Warning  Failed      pod/search-6b7c9d8e7-abcde   Error: ErrImagePull
+{"log":"2026-11-12T11:40:01.311Z ERROR 1 --- [payments] [main] o.s.boot.SpringApplication : Application run failed: java.lang.IllegalStateException: Missing STRIPE_API_KEY\n","stream":"stderr","time":"2026-11-12T11:40:01.311822Z"}

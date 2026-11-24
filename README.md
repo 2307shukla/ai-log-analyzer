@@ -2,7 +2,7 @@
 
 An AI-assisted security log analyzer built with **Spring Boot 3** and **Spring AI**, running on **Google Gemini's free tier**.
 
-Upload an Apache/Nginx access log, an SSH auth log, or JSON-lines logs. The app detects attack patterns deterministically, scores the risk, maps each finding to **MITRE ATT&CK**, draws a request timeline, then has an LLM write a readable incident report. Reports can be downloaded as Markdown or JSON, and you can **chat with the log**: ask questions like "Which IP should I block?" and get answers grounded only in what the log shows.
+Upload a log in any of ten formats (web, SSH, Linux syslog, JSON lines, Spring Boot, Windows Security events, AWS CloudTrail, UFW/iptables, Docker/Kubernetes, or anything else). The format is detected automatically, and you can override it. The app detects attack patterns deterministically, scores the risk, maps each finding to **MITRE ATT&CK**, draws a request timeline, then has an LLM write a readable incident report. Reports can be downloaded as Markdown or JSON, and you can **chat with the log**: ask questions like "Which IP should I block?" and get answers grounded only in what the log shows.
 
 **Live demo:** https://ai-log-analyzer-5l3n.onrender.com
 
@@ -25,22 +25,41 @@ The model reasons over verified numbers, never raw text. A 50 MB log is reduced 
 
 ## Detection rules
 
-All implemented locally in [`FindingDetector`](src/main/java/com/abhijeet/loganalyzer/service/FindingDetector.java). Every finding carries a severity, a MITRE ATT&CK technique where one applies, a count, up to five pieces of evidence, and a concrete recommendation.
+Implemented locally in [`FindingDetector`](src/main/java/com/abhijeet/loganalyzer/service/FindingDetector.java) (web and authentication) and [`PlatformRules`](src/main/java/com/abhijeet/loganalyzer/service/PlatformRules.java) (Windows, Linux, cloud, firewall, application, containers). Every finding carries a severity, a MITRE ATT&CK technique from the static table in [`MitreMapping`](src/main/java/com/abhijeet/loganalyzer/service/MitreMapping.java) where one applies, a count, up to five pieces of evidence, and a recommendation.
 
 | Rule | Severity | MITRE ATT&CK | Fires when |
 |---|---|---|---|
-| `COMPROMISED_LOGIN` | CRITICAL | T1078 Valid Accounts | An address logs in successfully after 3+ failures |
-| `BRUTE_FORCE` | MEDIUM / HIGH / CRITICAL | T1110 Brute Force | 3+ failed logins from one address (HIGH at 10, CRITICAL at 50) |
-| `PASSWORD_SPRAYING` | HIGH | T1110.003 Password Spraying | One address tries 5+ different account names |
-| `SQL_INJECTION` | HIGH | T1190 Exploit Public-Facing Application | SQL syntax in the URL, including URL-encoded forms |
-| `PATH_TRAVERSAL` | HIGH | T1190 | `../`, `/etc/passwd` and similar in the URL |
+| `COMPROMISED_LOGIN` | CRITICAL | T1078 | An address logs in successfully after 3+ failures (SSH, Windows 4624, AWS console) |
+| `BRUTE_FORCE` | MEDIUM–CRITICAL | T1110 | 3+ failed logins from one address (HIGH at 10, CRITICAL at 50) |
+| `PASSWORD_SPRAYING` | HIGH | T1110.003 | One address tries 5+ account names |
+| `WEB_LOGIN_BRUTE_FORCE` | HIGH | T1110.001 | 10+ login POSTs from one address (`/login`, `wp-login.php`, `xmlrpc.php`, …) |
+| `SSH_ROOT_LOGIN` | MEDIUM / HIGH | T1078.003 | SSH logins attempted as root (HIGH if 10+ or one succeeded) |
+| `SQL_INJECTION` / `PATH_TRAVERSAL` | HIGH | T1190 | Attack syntax in the URL, URL-decoded first |
 | `XSS` | MEDIUM | T1190 | Script or event-handler payloads in the URL |
-| `SENSITIVE_PATH_PROBING` | MEDIUM / HIGH | T1595.003 Wordlist Scanning | Requests for `.env`, `.git`, `wp-login`, `phpmyadmin`, admin panels (HIGH when one address makes 10+) |
-| `SCANNER_USER_AGENT` | MEDIUM | T1595.002 Vulnerability Scanning | Known scanner user agents such as sqlmap or nikto |
-| `FORCED_BROWSING` | MEDIUM | T1595.003 | One address hits 10+ different pages that return 404 |
-| `SERVER_ERRORS` | MEDIUM / HIGH | | 3+ responses with a 5xx status (HIGH at 20) |
-| `REQUEST_BURST` | MEDIUM / HIGH | T1498 Network Denial of Service | Busiest minute is at least 5x the median and at least 20 requests; needs timestamps and 30+ timed events |
-| `TRAFFIC_CONCENTRATION` | LOW | | One address produces a third of all requests |
+| `SENSITIVE_PATH_PROBING` / `FORCED_BROWSING` | MEDIUM / HIGH | T1595.003 | `.env`, `.git`, admin panels; 10+ distinct 404s from one address |
+| `SCANNER_USER_AGENT` | MEDIUM | T1595.002 | sqlmap, nikto, nmap, zgrab, … |
+| `SERVER_ERRORS` | MEDIUM / HIGH | | 3+ responses with a 5xx status |
+| `REQUEST_BURST` | MEDIUM / HIGH | T1498 | Busiest minute 5x the median and 20+ requests |
+| `TRAFFIC_CONCENTRATION` | LOW | | One address makes a third of all web requests |
+| `SUDO_SU_USAGE` | LOW / MEDIUM | T1548.003 | sudo commands and su sessions (MEDIUM when a shell or account/sudoers change is involved) |
+| `SUDO_SU_FAILURES` | MEDIUM | T1548.003 | 3+ failed sudo or su attempts |
+| `ACCOUNT_CREATED` | MEDIUM | T1136.001 | Windows 4720 or Linux `useradd` |
+| `PRIVILEGED_GROUP_CHANGE` | HIGH | T1098 | Windows 4728/4732/4756 or Linux add to sudo/wheel/adm/docker |
+| `PRIVILEGE_USE` | LOW | T1078.002 | Windows 4672/4673/4674 |
+| `ACCOUNT_LOCKOUT` | MEDIUM | T1110 | Windows 4740 |
+| `AUDIT_LOG_CLEARED` | CRITICAL | T1070.001 | Windows 1102 |
+| `CONSOLE_LOGIN_WITHOUT_MFA` | HIGH | T1078.004 | AWS console sign-in with MFAUsed = No |
+| `ROOT_ACCOUNT_USAGE` | HIGH / CRITICAL | T1078.004 | Any AWS root activity (CRITICAL for a console sign-in) |
+| `IAM_CHANGES` | MEDIUM / HIGH | T1098 | IAM create/attach/put/delete calls (HIGH when they grant access) |
+| `DELETED_RESOURCES` | MEDIUM / HIGH | T1485 | Successful Delete*/Terminate* calls (HIGH for buckets, databases, snapshots, instances, keys) |
+| `CLOUD_LOGGING_DISABLED` | CRITICAL | T1562.008 | StopLogging, DeleteTrail, DeleteDetector, DeleteFlowLogs |
+| `PORT_SCAN` | HIGH | T1046 | One source hits 10+ destination ports |
+| `FIREWALL_BLOCKS` | LOW / MEDIUM | | 20+ blocked connections |
+| `APP_EXCEPTIONS` | MEDIUM / HIGH | | 3+ Java exceptions, grouped by class with root causes |
+| `ERROR_BURST` | MEDIUM / HIGH | | 10+ ERROR lines in one minute and 3x the usual error minute |
+| `CRASH_LOOP` | HIGH / CRITICAL | | CrashLoopBackOff / back-off restarting |
+| `OOM_KILL` | HIGH | | OOMKilled or kernel out-of-memory kills |
+| `PROBE_FAILURES` / `IMAGE_PULL_ERRORS` | MEDIUM | | Failing liveness/readiness probes; ErrImagePull |
 
 **Risk score.** Each finding adds its severity weight (CRITICAL 40, HIGH 25, MEDIUM 12, LOW 4), capped at 100. The overall level is the higher of the score band (70+ CRITICAL, 40+ HIGH, 15+ MEDIUM, otherwise LOW) and the most serious single finding, so one critical issue is never hidden behind a low total. A log with no findings is `CLEAN`.
 
@@ -54,7 +73,11 @@ Everything that came from the log is untrusted text. Evidence is clipped, stripp
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/logs/upload` | Upload a log (multipart field `file`) |
+| `POST` | `/api/logs/upload` | Upload a log (multipart field `file`, optional `format`); max 5 MB, files over 100,000 lines are sampled |
+| `GET` | `/api/logs/formats` | Formats that can be detected or forced |
+| `POST` | `/api/logs/format?format=` | Re-read the loaded log with a manual format override (`auto` to detect again) |
+| `GET` | `/api/logs/samples` | Bundled sample logs, one per format |
+| `POST` | `/api/logs/samples/{id}` | Load a sample into your session |
 | `GET` | `/api/logs/summary` | Findings, risk score, timeline and statistics — **no AI call, no quota used** |
 | `GET` | `/api/logs/analyze` | Everything in summary plus the LLM incident report |
 | `POST` | `/api/logs/chat` | Ask a question about the loaded log; JSON `{"question": "...", "history": [...]}` (shares the AI rate limit) |
@@ -95,11 +118,22 @@ The analyze endpoint returns both halves:
 
 ## Supported log formats
 
-- **Apache / Nginx combined** — `IP - - [date] "METHOD path HTTP/1.1" status bytes "referer" "ua"`; the timestamp and its UTC offset are read
-- **SSH auth logs** — `Failed password`, `Accepted password/publickey`, `Invalid user`, `authentication failure`; the account name is extracted, and the year (syslog omits it) is taken from other dated lines in the file or the current year
-- **JSON lines** — one object per line, with common key names for address, path, status, user agent and time (ISO-8601 or epoch), so Nginx/Caddy/app JSON logs work as they are
+Detected per line from the content, so mixed files work. The UI shows the detected format and has a dropdown to force one.
 
-Unrecognised lines are never dropped — they are kept with their raw text and any IP found, so the parser degrades instead of failing.
+| Format | Recognised by | Sample |
+|---|---|---|
+| Apache / Nginx access | Combined log format | [`apache-access.log`](src/main/resources/samples/apache-access.log) |
+| SSH auth | `sshd` lines: failed/accepted password or key, invalid user, PAM failures | [`ssh-auth.log`](src/main/resources/samples/ssh-auth.log) |
+| Linux syslog | `host program[pid]: message` — sudo, su, useradd, usermod, anything else | [`linux-syslog.log`](src/main/resources/samples/linux-syslog.log) |
+| JSON lines | One object per line; common keys (`remote_addr`, `client_ip`, `uri`, `status`, `level`, `@timestamp`, …) | [`json-lines.jsonl`](src/main/resources/samples/json-lines.jsonl) |
+| Spring Boot / Java | `timestamp LEVEL …` (Boot and Logback), stack traces folded into their log line | [`spring-boot.log`](src/main/resources/samples/spring-boot.log) |
+| Windows Security events | `EventID=` key/value, Event Viewer CSV text, or winlogbeat JSON | [`windows-security.log`](src/main/resources/samples/windows-security.log) |
+| AWS CloudTrail | A `{"Records": [...]}` file or one event per line | [`cloudtrail.json`](src/main/resources/samples/cloudtrail.json) |
+| UFW / iptables | Kernel lines with `SRC=` `DST=` `DPT=` | [`ufw-firewall.log`](src/main/resources/samples/ufw-firewall.log) |
+| Docker / Kubernetes | kubectl events, kubelet/kernel OOM lines, Docker `json-file` logs | [`kubernetes.log`](src/main/resources/samples/kubernetes.log) |
+| Anything else | Kept as text with the first IPv4 address and any timestamp | |
+
+Unrecognised or malformed lines are never dropped and never fail the upload. Uploads are capped at 5 MB; a file longer than 100,000 lines is analysed on its first 100,000 lines and the response says so (`sampled: true`). All sample addresses use documentation ranges.
 
 ---
 
@@ -160,7 +194,7 @@ Environment variables:
 ./mvnw test
 ```
 
-**73 tests**, covering the detection pipeline, the report features and the production hardening:
+**129 tests**, covering the detection pipeline, the report features and the production hardening:
 
 | Test class | Covers |
 |---|---|
@@ -173,6 +207,12 @@ Environment variables:
 | `FeatureIntegrationTest` | Sample log yields the headline findings and a timeline, `.md` and `.json` downloads with fixed filenames, bad format returns 400, exports use the caller's own upload |
 | `ChatPromptTest` | Chat answers are grounded in the summary, only recent history is sent, long or empty input is clipped or skipped |
 | `ChatEndpointIntegrationTest` | Empty, oversized and non-JSON questions are rejected before any AI call |
+| `LogFormatDetectionTest` | Every format detected from content, with its fields (users, addresses, event ids, ports, exception classes) |
+| `BoundedParsingTest` | Sampling of long files, malformed lines never fail, forced format override |
+| `PlatformRulesTest` | Windows, Linux, CloudTrail, firewall, Java and container rules and their thresholds |
+| `MitreMappingTest` | Every ATT&CK entry is well formed; availability rules have none |
+| `SampleFilesTest` | Each bundled sample is detected as its format and produces its expected findings |
+| `FormatsAndSamplesIntegrationTest` | Sample and format endpoints, per-session override, sampling of a 100,050-line upload |
 | `RateLimitFilterTest` | Per-client and global limits, forged `X-Forwarded-For` cannot evade the limit, upload limit |
 | `LogStoreTest` | Uploads isolated per session, sample fallback, bounded memory |
 | `SessionIsolationIntegrationTest` | One visitor's upload is never visible to another; health endpoint and security headers |
