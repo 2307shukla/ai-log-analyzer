@@ -2,7 +2,7 @@
 
 An AI-assisted security log analyzer built with **Spring Boot 3** and **Spring AI**, running on **Google Gemini's free tier**.
 
-Upload an Apache/Nginx access log, an SSH auth log, or JSON-lines logs. The app detects attack patterns deterministically, scores the risk, maps each finding to **MITRE ATT&CK**, draws a request timeline, then has an LLM write a readable incident report. Reports can be downloaded as Markdown or JSON.
+Upload an Apache/Nginx access log, an SSH auth log, or JSON-lines logs. The app detects attack patterns deterministically, scores the risk, maps each finding to **MITRE ATT&CK**, draws a request timeline, then has an LLM write a readable incident report. Reports can be downloaded as Markdown or JSON, and you can **chat with the log**: ask questions like "Which IP should I block?" and get answers grounded only in what the log shows.
 
 **Live demo:** https://ai-log-analyzer-5l3n.onrender.com
 
@@ -57,6 +57,7 @@ Everything that came from the log is untrusted text. Evidence is clipped, stripp
 | `POST` | `/api/logs/upload` | Upload a log (multipart field `file`) |
 | `GET` | `/api/logs/summary` | Findings, risk score, timeline and statistics — **no AI call, no quota used** |
 | `GET` | `/api/logs/analyze` | Everything in summary plus the LLM incident report |
+| `POST` | `/api/logs/chat` | Ask a question about the loaded log; JSON `{"question": "...", "history": [...]}` (shares the AI rate limit) |
 | `GET` | `/api/logs/export?format=md\|json` | Downloadable report built from the findings — **no AI call** |
 | `GET` | `/actuator/health` | Liveness/readiness probe (used by Render) |
 
@@ -159,7 +160,7 @@ Environment variables:
 ./mvnw test
 ```
 
-**66 tests**, covering the detection pipeline, the report features and the production hardening:
+**73 tests**, covering the detection pipeline, the report features and the production hardening:
 
 | Test class | Covers |
 |---|---|
@@ -170,6 +171,8 @@ Environment variables:
 | `TimelineTest` | Bucketing, gap filling, bucket size scaling with the time span, no timestamps means no timeline |
 | `ReportExporterTest` | Markdown content, clean-log message, log text cannot inject HTML or break tables, JSON export is valid |
 | `FeatureIntegrationTest` | Sample log yields the headline findings and a timeline, `.md` and `.json` downloads with fixed filenames, bad format returns 400, exports use the caller's own upload |
+| `ChatPromptTest` | Chat answers are grounded in the summary, only recent history is sent, long or empty input is clipped or skipped |
+| `ChatEndpointIntegrationTest` | Empty, oversized and non-JSON questions are rejected before any AI call |
 | `RateLimitFilterTest` | Per-client and global limits, forged `X-Forwarded-For` cannot evade the limit, upload limit |
 | `LogStoreTest` | Uploads isolated per session, sample fallback, bounded memory |
 | `SessionIsolationIntegrationTest` | One visitor's upload is never visible to another; health endpoint and security headers |

@@ -6,88 +6,107 @@
 <title>AI Log Analyzer</title>
 <style>
   :root {
-    color-scheme: dark;
-    --bg: #0b0d12; --panel: #14181f; --line: #232a36; --muted: #8b95a7; --text: #e6e8ee;
-    --crit: #ef4444; --high: #f97316; --med: #f59e0b; --low: #38bdf8; --ok: #4ade80;
+    color-scheme: light;
+    --bg: #fde047; --panel: #fffdf5; --well: #fef9c3; --line: #eab308; --muted: #6b5a1a; --text: #1c1917;
+    --accent: #1c1917; --bar: #a16207;
+    --crit: #dc2626; --high: #ea580c; --med: #d97706; --low: #0284c7; --ok: #15803d;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    margin: 0; min-height: 100vh; color: var(--text);
+    background: linear-gradient(180deg, #fde047 0%, #facc15 100%) fixed;
     font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     padding: 28px 18px 48px;
   }
   .wrap { max-width: 1040px; margin: 0 auto; }
-  h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.5px; }
-  h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 600; }
-  .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  h1 { margin: 0 0 4px; font-size: 28px; letter-spacing: -0.5px; }
+  h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 700; }
+  .sub { color: #422006; font-size: 13.5px; margin-bottom: 14px; }
   .pill {
-    display: inline-flex; align-items: center; gap: 7px; background: #10251a; color: var(--ok);
-    border: 1px solid #1c4530; padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 7px; background: #1c1917; color: #fde047;
+    padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
   }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
+  .panel { background: var(--panel); border: 1.5px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 0 rgba(161,98,7,.18); }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .grid2 { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 760px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
 
   .drop {
-    border: 2px dashed #334155; border-radius: 10px; padding: 22px; text-align: center;
-    color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s;
+    border: 2px dashed #ca8a04; border-radius: 12px; padding: 22px; text-align: center;
+    color: var(--muted); cursor: pointer; background: var(--well); transition: border-color .15s, background .15s;
   }
-  .drop:hover, .drop.over { border-color: #3b82f6; background: #101827; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: #fef08a; }
   .drop strong { color: var(--text); }
   .drop input { display: none; }
   .btn {
-    background: #3b82f6; color: #fff; border: 0; padding: 10px 18px; border-radius: 8px;
-    font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block;
+    background: var(--accent); color: #fde047; border: 0; padding: 10px 18px; border-radius: 9px;
+    font-weight: 700; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-block;
   }
-  .btn.alt { background: #1e293b; border: 1px solid #334155; color: var(--text); }
+  .btn.alt { background: #fffdf5; border: 1.5px solid var(--accent); color: var(--text); }
   .btn:disabled { opacity: .45; cursor: default; }
   .src { font-size: 13px; color: var(--muted); }
   .src b { color: var(--text); }
 
   .gauge { text-align: center; }
   .gauge svg { width: 150px; height: 150px; }
-  .gauge .lvl { font-size: 13px; font-weight: 700; letter-spacing: .6px; margin-top: 2px; }
+  .gauge .lvl { font-size: 13px; font-weight: 800; letter-spacing: .6px; margin-top: 2px; }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; align-content: start; }
-  .kpi { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px; }
+  .kpi { background: var(--well); border: 1px solid #fde68a; border-radius: 10px; padding: 12px; }
   .kpi .k { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
-  .kpi .v { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .kpi .v { font-size: 22px; font-weight: 800; margin-top: 2px; }
   .kpi .v.small { font-size: 13px; font-weight: 600; word-break: break-all; }
 
-  .finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 9px; padding: 14px 16px; margin-bottom: 12px; background: var(--bg); }
+  .finding { border: 1px solid #fde68a; border-left-width: 5px; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; background: #fffef8; }
   .fhead { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
-  .badge { font-size: 11px; font-weight: 800; letter-spacing: .6px; padding: 2px 8px; border-radius: 5px; color: #0b0d12; }
+  .badge { font-size: 11px; font-weight: 800; letter-spacing: .6px; padding: 2px 8px; border-radius: 5px; color: #fff; }
   .ftitle { font-weight: 700; }
-  .chip { font-size: 11.5px; color: #93c5fd; background: #14233b; border: 1px solid #1e3a5f; padding: 1px 8px; border-radius: 999px; }
+  .chip { font-size: 11.5px; color: #1e3a8a; background: #dbeafe; border: 1px solid #bfdbfe; padding: 1px 8px; border-radius: 999px; }
   .cnt { font-size: 12px; color: var(--muted); margin-left: auto; }
-  .fdesc { font-size: 13.5px; color: #c8cfdb; margin: 4px 0 8px; }
-  .ev { margin: 0 0 8px; padding: 8px 10px 8px 26px; background: #0e1219; border-radius: 7px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #aeb8c8; word-break: break-word; }
-  .fix { font-size: 13px; color: #86efac; }
+  .fdesc { font-size: 13.5px; color: #44403c; margin: 4px 0 8px; }
+  .ev { margin: 0 0 8px; padding: 8px 10px 8px 26px; background: var(--well); border-radius: 7px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: #3f3a2c; word-break: break-word; }
+  .fix { font-size: 13px; color: #166534; }
   .fix b { color: var(--ok); }
-  .clean { color: var(--ok); font-size: 14px; }
+  .clean { color: var(--ok); font-size: 14px; font-weight: 600; }
 
   .bars .r { display: grid; grid-template-columns: 150px 1fr 48px; gap: 10px; align-items: center; font-size: 12.5px; margin-bottom: 6px; }
-  .bars .n { color: #c8cfdb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; }
-  .bars .t { background: var(--bg); border-radius: 4px; height: 10px; overflow: hidden; }
-  .bars .f { height: 100%; background: #3b82f6; border-radius: 4px; }
+  .bars .n { color: #44403c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; }
+  .bars .t { background: var(--well); border-radius: 4px; height: 10px; overflow: hidden; }
+  .bars .f { height: 100%; background: var(--bar); border-radius: 4px; }
   .bars .c { text-align: right; color: var(--muted); }
-  .stack { display: flex; height: 14px; border-radius: 6px; overflow: hidden; background: var(--bg); margin-bottom: 8px; }
+  .stack { display: flex; height: 14px; border-radius: 6px; overflow: hidden; background: var(--well); margin-bottom: 8px; }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
   .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
   .chart svg { width: 100%; height: auto; display: block; }
   .axis { fill: var(--muted); font-size: 11px; }
 
-  .report { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 16px 18px; color: #c8cfdb; font-size: 14px; }
+  .report { background: #fffef8; border: 1px solid #fde68a; border-radius: 10px; padding: 16px 18px; color: #292524; font-size: 14px; }
   .report h3 { margin: 14px 0 6px; font-size: 15px; color: var(--text); }
   .report h3:first-child { margin-top: 0; }
   .report h4 { margin: 12px 0 4px; font-size: 14px; color: var(--text); }
   .report p { margin: 0 0 8px; }
   .report ul { margin: 0 0 8px; padding-left: 20px; }
+
+  .chat { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; padding: 4px 2px 8px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; font-size: 14px; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fef9c3; border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--well); border: 1px solid #fde68a; border-bottom-left-radius: 4px; }
+  .msg.bot p { margin: 0 0 6px; } .msg.bot p:last-child { margin: 0; }
+  .msg.bot ul { margin: 0 0 6px; padding-left: 18px; }
+  .msg.bot h3, .msg.bot h4 { margin: 4px 0; font-size: 14px; }
+  .msg.err { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+  .suggest { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 12px; }
+  .suggest button { background: var(--well); border: 1px solid #eab308; color: var(--text); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; cursor: pointer; }
+  .suggest button:hover { background: #fef08a; }
+  .ask { display: flex; gap: 8px; }
+  .ask input { flex: 1; padding: 11px 14px; border-radius: 10px; border: 1.5px solid #ca8a04; background: #fff; font: inherit; color: var(--text); }
+  .ask input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
   .muted { color: var(--muted); font-size: 13px; }
-  code { background: #1c222c; padding: 2px 6px; border-radius: 5px; color: #93c5fd; font-size: 12.5px; }
-  .err { color: #f87171; }
+  code { background: #fef3c7; padding: 2px 6px; border-radius: 5px; color: #7c2d12; font-size: 12.5px; }
+  .err { color: #b91c1c; }
+  a.link { color: #1d4ed8; }
 </style>
 </head>
 <body>
@@ -117,18 +136,34 @@
     <div class="report" id="report"><span class="muted">Press <b>Analyze with AI</b> to have the model write an incident report from the findings above.</span></div>
   </div>
 
+  <div class="panel">
+    <h2>Ask about this log</h2>
+    <div class="suggest" id="suggest">
+      <button type="button">Which IP is the biggest threat?</button>
+      <button type="button">Was any account compromised?</button>
+      <button type="button">What should I fix first?</button>
+      <button type="button">Explain the SQL injection attempts</button>
+    </div>
+    <div class="chat" id="chat" aria-live="polite"><div class="msg bot">Ask me anything about the loaded log. I answer only from what the log shows.</div></div>
+    <form class="ask" id="askForm" style="margin-top:10px">
+      <input id="question" maxlength="500" autocomplete="off" placeholder="e.g. Which addresses should I block?" aria-label="Your question">
+      <button class="btn" id="send" type="submit">Ask</button>
+    </form>
+  </div>
+
   <div class="panel muted">
+    <div><code>POST /api/logs/chat</code> &mdash; JSON <code>{"question": "...", "history": [...]}</code>; AI answer grounded in the findings</div>
     <div><code>POST /api/logs/upload</code> &mdash; multipart field <code>file</code></div>
     <div><code>GET /api/logs/summary</code> &mdash; findings, risk score, timeline; no AI call</div>
     <div><code>GET /api/logs/analyze</code> &mdash; summary plus the LLM report</div>
     <div><code>GET /api/logs/export?format=md|json</code> &mdash; downloadable report; no AI call</div>
-    <div><code>GET /actuator/health</code> &middot; <a href="/swagger-ui.html" style="color:#93c5fd">Swagger UI</a></div>
+    <div><code>GET /actuator/health</code> &middot; <a class="link" href="/swagger-ui.html">Swagger UI</a></div>
   </div>
 </div>
 
 <script>
-  const COLORS = { CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#f59e0b', LOW: '#38bdf8', CLEAN: '#4ade80' };
-  const STATUS_COLORS = { '2xx': '#4ade80', '3xx': '#38bdf8', '4xx': '#f59e0b', '5xx': '#ef4444' };
+  const COLORS = { CRITICAL: '#dc2626', HIGH: '#ea580c', MEDIUM: '#d97706', LOW: '#0284c7', CLEAN: '#15803d' };
+  const STATUS_COLORS = { '2xx': '#16a34a', '3xx': '#0284c7', '4xx': '#d97706', '5xx': '#dc2626' };
 
   const fileInput = document.getElementById('file');
   const drop = document.getElementById('drop');
@@ -151,11 +186,11 @@
     const filled = c * Math.max(0, Math.min(100, num(score))) / 100;
     const col = color(level);
     return '<div class="gauge"><svg viewBox="0 0 120 120" role="img" aria-label="Risk score ' + num(score) + ' of 100">'
-      + '<circle cx="60" cy="60" r="52" fill="none" stroke="#232a36" stroke-width="10"/>'
+      + '<circle cx="60" cy="60" r="52" fill="none" stroke="#fef3c7" stroke-width="10"/>'
       + '<circle cx="60" cy="60" r="52" fill="none" stroke="' + col + '" stroke-width="10" stroke-linecap="round"'
       + ' stroke-dasharray="' + filled.toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 60 60)"/>'
-      + '<text x="60" y="64" text-anchor="middle" fill="#e6e8ee" font-size="28" font-weight="700">' + num(score) + '</text>'
-      + '<text x="60" y="82" text-anchor="middle" fill="#8b95a7" font-size="10">/ 100</text></svg>'
+      + '<text x="60" y="64" text-anchor="middle" fill="#1c1917" font-size="28" font-weight="700">' + num(score) + '</text>'
+      + '<text x="60" y="82" text-anchor="middle" fill="#6b5a1a" font-size="10">/ 100</text></svg>'
       + '<div class="lvl" style="color:' + col + '">' + esc(level) + ' RISK</div></div>';
   }
 
@@ -224,8 +259,8 @@
       const x = padL + i * bw + 0.5, w = Math.max(bw - 1.5, 1);
       const tip = esc(label(p.start, bucketMinutes)) + ': ' + num(p.requests) + ' requests, ' + num(p.errors) + ' errors or failures';
       svg += '<g><title>' + tip + '</title><rect x="' + x.toFixed(1) + '" y="' + (top + plotH - h).toFixed(1) + '" width="' + w.toFixed(1)
-        + '" height="' + Math.max(h, 0).toFixed(1) + '" fill="#3b82f6" rx="1.5"/>'
-        + (eh > 0 ? '<rect x="' + x.toFixed(1) + '" y="' + (top + plotH - eh).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + eh.toFixed(1) + '" fill="#ef4444" rx="1.5"/>' : '')
+        + '" height="' + Math.max(h, 0).toFixed(1) + '" fill="#a16207" rx="1.5"/>'
+        + (eh > 0 ? '<rect x="' + x.toFixed(1) + '" y="' + (top + plotH - eh).toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + eh.toFixed(1) + '" fill="#dc2626" rx="1.5"/>' : '')
         + '</g>';
     });
     const mid = Math.floor(points.length / 2);
@@ -235,8 +270,8 @@
     });
     svg += '</svg>';
     const bucket = bucketMinutes >= 1440 ? (bucketMinutes / 1440) + ' day' : bucketMinutes >= 60 ? (bucketMinutes / 60) + ' h' : bucketMinutes + ' min';
-    return '<div class="chart">' + svg + '</div><div class="legend"><span><i style="background:#3b82f6"></i>requests</span>'
-      + '<span><i style="background:#ef4444"></i>errors / failed logins</span><span>bucket: ' + bucket + ' (UTC)</span></div>';
+    return '<div class="chart">' + svg + '</div><div class="legend"><span><i style="background:#a16207"></i>requests</span>'
+      + '<span><i style="background:#dc2626"></i>errors / failed logins</span><span>bucket: ' + bucket + ' (UTC)</span></div>';
   }
 
   function render(data) {
@@ -291,6 +326,8 @@
       const form = new FormData();
       form.append('file', file);
       render(await request('/api/logs/upload', { method: 'POST', body: form }));
+      history.length = 0;
+      chatEl.innerHTML = '<div class="msg bot">New log loaded. Ask me about it.</div>';
       reportEl.innerHTML = '<span class="muted">Loaded ' + esc(file.name) + '. Press <b>Analyze with AI</b> for the incident report.</span>';
     } catch (e) {
       reportEl.innerHTML = '<span class="err">Upload failed: ' + esc(e.message) + '</span>';
@@ -314,6 +351,53 @@
     } catch (e) {
       reportEl.innerHTML = '<span class="err">Analysis failed: ' + esc(e.message) + '</span>';
     } finally { analyzeBtn.disabled = false; }
+  });
+
+  // ------------------------------------------------------------------- chat
+
+  const chatEl = document.getElementById('chat');
+  const askForm = document.getElementById('askForm');
+  const questionEl = document.getElementById('question');
+  const sendBtn = document.getElementById('send');
+  const history = [];
+
+  function bubble(cls, html) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + cls;
+    div.innerHTML = html;
+    chatEl.appendChild(div);
+    chatEl.scrollTop = chatEl.scrollHeight;
+    return div;
+  }
+
+  async function ask(question) {
+    question = question.trim();
+    if (!question || sendBtn.disabled) return;
+    bubble('user', esc(question));
+    questionEl.value = '';
+    sendBtn.disabled = true;
+    const pending = bubble('bot', '<span class="muted">Thinking&hellip;</span>');
+    try {
+      const data = await request('/api/logs/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, history: history.slice(-6) })
+      });
+      const answer = data.answer || data.message || 'No answer returned.';
+      pending.innerHTML = markdown(answer);
+      history.push({ role: 'user', content: question }, { role: 'assistant', content: answer });
+    } catch (e) {
+      pending.className = 'msg bot err';
+      pending.textContent = 'Could not answer: ' + e.message;
+    } finally {
+      sendBtn.disabled = false;
+      questionEl.focus();
+    }
+  }
+
+  askForm.addEventListener('submit', e => { e.preventDefault(); ask(questionEl.value); });
+  document.getElementById('suggest').addEventListener('click', e => {
+    if (e.target.tagName === 'BUTTON') ask(e.target.textContent);
   });
 
   request('/api/logs/summary').then(render).catch(e => {
