@@ -61,8 +61,8 @@ class LogAnalysisServiceTest {
     void flagsInjectionAndScannerPaths() {
         List<LogEvent> events = List.of(
                 web("203.0.113.45", "/product?id=1' OR '1'='1", 500),
-                web("45.155.205.233", "/.env", 404),
-                web("45.155.205.233", "/../../etc/passwd", 400));
+                web("192.0.2.66", "/.env", 404),
+                web("192.0.2.66", "/../../etc/passwd", 400));
 
         LogSummary summary = service.summarize(events);
 

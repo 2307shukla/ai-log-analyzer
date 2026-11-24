@@ -104,7 +104,7 @@ rules:
     severity: high
 
   - id: iam-change-burst
-    name: More than 3 IAM changes by one identity in 10 minutes
+    name: 3 or more IAM changes by one identity in 10 minutes
     metric: iam_changes
     groupBy: user
     threshold: 3

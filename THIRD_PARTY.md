@@ -1,6 +1,6 @@
 # Third-party software and data
 
-Everything here is free and open source; nothing needs an account, key or payment.
+This project is MIT licensed (see [LICENSE](LICENSE)). Everything below is free; nothing needs an account, key or payment. All software is MIT or Apache-2.0; no GPL, LGPL or AGPL code is used.
 
 | Component | Version | Used for | License |
 |---|---|---|---|
@@ -28,3 +28,4 @@ CC BY 4.0 is a data license (attribution required), not a software license; it w
 | Tool | Used for | License |
 |---|---|---|
 | [mmdb-writer](https://github.com/VimT/MaxMind-DB-Writer-python) | Generating the GeoIP test fixture | MIT |
+| [Playwright](https://playwright.dev) | Taking the README screenshots | Apache-2.0 |

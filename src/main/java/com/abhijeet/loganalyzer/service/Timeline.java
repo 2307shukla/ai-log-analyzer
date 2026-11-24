@@ -89,8 +89,11 @@ public final class Timeline {
         int[] app = new int[size];
         for (LogEvent e : events) {
             Instant t = e.timestamp();
-            // Stack-trace lines belong to the log line above them and are not events of their own.
-            if (t == null || e.is("stack_frame") || e.is("caused_by")) {
+            // Stack-trace lines (frames, causes and the exception header, which carry no log level)
+            // belong to the log line above them and are not events of their own.
+            boolean stackLine = e.is("stack_frame") || e.is("caused_by")
+                    || (e.format() == com.abhijeet.loganalyzer.model.LogFormat.SPRING_BOOT && e.level() == null);
+            if (t == null || stackLine) {
                 continue;
             }
             int i = (int) (Math.floorDiv(t.getEpochSecond(), bucketSeconds) - first);

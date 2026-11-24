@@ -118,7 +118,7 @@ class FindingDetectorTest {
 
     @Test
     void flagsKnownScannerUserAgents() {
-        Finding finding = find(List.of(webAgent("45.155.205.233", "sqlmap/1.7.2#stable")), "SCANNER_USER_AGENT").get();
+        Finding finding = find(List.of(webAgent("192.0.2.66", "sqlmap/1.7.2#stable")), "SCANNER_USER_AGENT").get();
         assertEquals("T1595.002 Active Scanning: Vulnerability Scanning", finding.mitre());
         assertTrue(find(List.of(webAgent("1.1.1.1", "Mozilla/5.0")), "SCANNER_USER_AGENT").isEmpty());
     }

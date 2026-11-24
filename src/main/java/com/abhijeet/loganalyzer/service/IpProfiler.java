@@ -124,11 +124,11 @@ public final class IpProfiler {
         }
         if (p.failures >= 3) {
             score += 10 + Math.min(20, p.failures);
-            reasons.add(p.failures + " failed logins");
+            reasons.add(plural(p.failures, "failed login", "failed logins"));
         }
         if (p.attacks > 0) {
             score += 15 + Math.min(15, 3 * p.attacks);
-            reasons.add(p.attacks + " injection or traversal requests");
+            reasons.add(plural(p.attacks, "injection or traversal request", "injection or traversal requests"));
         }
         if (p.loggingDisabled) {
             score += 30;
@@ -148,7 +148,7 @@ public final class IpProfiler {
         }
         if (p.blocked >= 5) {
             score += Math.min(10, p.blocked / 2);
-            reasons.add(p.blocked + " connections blocked by the firewall");
+            reasons.add(plural(p.blocked, "connection", "connections") + " blocked by the firewall");
         }
         if (p.scanner != null) {
             score += 15;
@@ -156,7 +156,7 @@ public final class IpProfiler {
         }
         if (p.probes > 0) {
             score += 5 + Math.min(10, p.probes);
-            reasons.add(p.probes + " requests for sensitive paths");
+            reasons.add(plural(p.probes, "request", "requests") + " for sensitive paths");
         }
         if (p.missing.size() >= FindingDetector.FORCED_BROWSING_MIN) {
             score += 10;
@@ -164,7 +164,7 @@ public final class IpProfiler {
         }
         if (p.serverErrors >= 3) {
             score += 5;
-            reasons.add(p.serverErrors + " requests that caused server errors");
+            reasons.add(plural(p.serverErrors, "request", "requests") + " that caused server errors");
         }
         return Math.min(100, score);
     }
@@ -174,6 +174,10 @@ public final class IpProfiler {
                 p.blocked, p.ports.size(), List.copyOf(reasons), IpClassifier.classify(ip),
                 geo == null ? null : geo.country(), geo == null ? null : geo.countryCode(),
                 geo == null ? null : geo.city());
+    }
+
+    private static String plural(int n, String one, String many) {
+        return n + " " + (n == 1 ? one : many);
     }
 
     static Severity severity(int score) {

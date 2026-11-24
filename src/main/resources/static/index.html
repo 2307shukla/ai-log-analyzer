@@ -13,6 +13,7 @@
     --crit: #dc2626; --high: #ea580c; --med: #d97706; --low: #0284c7; --ok: #15803d;
   }
   * { box-sizing: border-box; }
+  html { background: #facc15; }
   body {
     margin: 0; min-height: 100vh; color: var(--text);
     background: linear-gradient(180deg, #fde047 0%, #facc15 100%) fixed;
@@ -279,7 +280,7 @@
         + '<div class="fhead"><span class="badge" style="background:' + col + '">' + esc(f.severity) + '</span>'
         + '<span class="ftitle">' + esc(f.title) + '</span>'
         + (f.mitre ? '<span class="chip">' + esc(f.mitre) + '</span>' : '')
-        + '<span class="cnt">' + num(f.count) + ' events &middot; ' + esc(f.rule) + '</span></div>'
+        + '<span class="cnt">' + num(f.count) + (num(f.count) === 1 ? ' event' : ' events') + ' &middot; ' + esc(f.rule) + '</span></div>'
         + '<div class="fdesc">' + esc(f.description) + '</div>'
         + (ev ? '<ul class="ev">' + ev + '</ul>' : '')
         + '<div class="fix"><b>Fix:</b> ' + esc(f.recommendation) + '</div></div>';
@@ -399,12 +400,13 @@
     if (!list || !list.length) return '<div class="clean">No address did anything suspicious.</div>' + note;
     const rows = list.map(o => {
       const where = o.country ? esc([o.city, o.country].filter(Boolean).join(', ')) : '<span class="muted">' + esc(o.network) + '</span>';
+      const n = (v, one, many) => num(v) + ' ' + (num(v) === 1 ? one : many);
       const activity = [
-        o.failedLogins ? num(o.failedLogins) + ' failed logins' : '',
-        o.attackRequests ? num(o.attackRequests) + ' attack requests' : '',
-        o.probes ? num(o.probes) + ' probes' : '',
+        o.failedLogins ? n(o.failedLogins, 'failed login', 'failed logins') : '',
+        o.attackRequests ? n(o.attackRequests, 'attack request', 'attack requests') : '',
+        o.probes ? n(o.probes, 'probe', 'probes') : '',
         o.blocked ? num(o.blocked) + ' blocked' : '',
-        o.portsProbed ? num(o.portsProbed) + ' ports' : ''].filter(Boolean).join(' &middot; ') || num(o.events) + ' events';
+        o.portsProbed ? n(o.portsProbed, 'port', 'ports') : ''].filter(Boolean).join(' &middot; ') || n(o.events, 'event', 'events');
       return '<tr><td class="ip">' + esc(o.ip) + '</td>'
         + '<td><span class="score" style="background:' + color(o.severity) + '">' + num(o.score) + '</span> <span class="muted">' + esc(o.severity) + '</span></td>'
         + '<td>' + where + '</td><td>' + activity + '</td>'
