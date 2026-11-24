@@ -37,25 +37,30 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAny(Exception ex) {
+        // The full detail goes to the server log only. Clients get a fixed message, because
+        // provider errors can contain internal URLs, model names and request fragments.
         log.error("Request failed", ex);
 
         String message = ex.getMessage();
-        String type = ex.getClass().getSimpleName();
         HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        String error = "Something went wrong. Please try again.";
 
         if (message != null) {
             String m = message.toLowerCase();
             if (m.contains("401") || m.contains("unauthorized") || m.contains("invalid api key")) {
                 status = HttpStatus.UNAUTHORIZED;
+                error = "The AI provider rejected the service credentials.";
             } else if (m.contains("402") || m.contains("insufficient") || m.contains("quota")
                     || m.contains("429") || m.contains("rate limit")) {
                 status = HttpStatus.TOO_MANY_REQUESTS;
+                error = "The AI provider is rate limited right now. Please try again shortly.";
             } else if (m.contains("404") || m.contains("model_not_found") || m.contains("not found")) {
                 status = HttpStatus.BAD_GATEWAY;
+                error = "The AI provider could not be reached. Please try again later.";
             }
         }
 
-        return ResponseEntity.status(status).body(body(type, message));
+        return ResponseEntity.status(status).body(body(error, null));
     }
 
     private Map<String, Object> body(String error, String detail) {

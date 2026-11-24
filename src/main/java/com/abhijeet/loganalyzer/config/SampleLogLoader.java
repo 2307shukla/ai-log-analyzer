@@ -43,7 +43,7 @@ public class SampleLogLoader implements ApplicationRunner {
         try (InputStream in = resource.getInputStream()) {
             String content = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             List<LogEvent> events = parser.parse(content);
-            store.set(SAMPLE, events);
+            store.setSample(SAMPLE, events);
             log.info("Loaded {} with {} entries", SAMPLE, events.size());
         } catch (Exception e) {
             log.warn("Could not load {}: {}", SAMPLE, e.getMessage());

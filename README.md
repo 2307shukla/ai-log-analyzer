@@ -44,6 +44,9 @@ All implemented locally in [`LogAnalysisService`](src/main/java/com/abhijeet/log
 | `POST` | `/api/logs/upload` | Upload a log (multipart field `file`) |
 | `GET` | `/api/logs/summary` | Statistics only — **no AI call, no quota used** |
 | `GET` | `/api/logs/analyze` | Statistics plus the LLM report |
+| `GET` | `/actuator/health` | Liveness/readiness probe (used by Render) |
+
+Each visitor's upload is private to their browser session. Visitors who have not uploaded anything see the bundled sample log.
 
 ### Example
 
@@ -113,6 +116,14 @@ spring.ai.openai.chat.completions-path=/chat/completions
 spring.ai.openai.chat.options.model=gemini-3.6-flash
 ```
 
+Environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AI_API_KEY` | `unset` | Gemini API key. Analysis returns an error until it is set. |
+| `PORT` | `8080` | HTTP port (Render sets this). |
+| `JAVA_OPTS` | `-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError` | JVM flags for the container. |
+
 > Gemini is reached through its **OpenAI-compatible** surface, so the standard Spring AI OpenAI client is used unchanged. Note there is **no `/v1`** in its paths, unlike OpenAI.
 
 ---
@@ -123,12 +134,17 @@ spring.ai.openai.chat.options.model=gemini-3.6-flash
 ./mvnw test
 ```
 
-**11 tests**, covering both halves of the pipeline:
+**29 tests**, covering the detection pipeline and the production hardening:
 
 | Test class | Covers |
 |---|---|
 | `LogParserTest` | Apache combined and SSH auth formats, unrecognised lines, empty input |
 | `LogAnalysisServiceTest` | Brute-force threshold, injection/scanner paths, 5xx clustering, traffic concentration, clean traffic, status bucketing |
+| `RateLimitFilterTest` | Per-client and global limits, forged `X-Forwarded-For` cannot evade the limit, upload limit |
+| `LogStoreTest` | Uploads isolated per session, sample fallback, bounded memory |
+| `SessionIsolationIntegrationTest` | One visitor's upload is never visible to another; health endpoint and security headers |
+| `SecurityHeadersFilterTest` | CSP, framing, nosniff, HSTS only over HTTPS |
+| `GlobalExceptionHandlerTest` | Provider error text is never returned to the client |
 
 The rule tests matter most: detection is the product here, and a rule that silently stops firing is invisible without them.
 
@@ -140,9 +156,17 @@ The rule tests matter most: detection is the product here, and a rule that silen
 2. Render → **New → Web Service** → connect the repo
 3. Runtime: **Docker**
 4. Environment variable: `AI_API_KEY` = your Gemini key
-5. Deploy
+5. Settings → **Health Check Path**: `/actuator/health`
+6. Deploy
 
-The `Dockerfile` caches Maven dependencies in a layer, so only your changed source recompiles on later builds.
+The `Dockerfile` caches Maven dependencies in a layer, so only your changed source recompiles on later builds. It builds through a Google-hosted Maven Central mirror with retries (Maven Central rate-limits Render's shared build IPs with HTTP 429), runs as a non-root user, and has a container `HEALTHCHECK`.
+
+### Production notes
+
+- **Rate limiting:** `/api/logs/analyze` is limited per client and globally (60 per minute across everyone), so the free Gemini quota cannot be drained. `/api/logs/upload` is limited per client. The client address is the last `X-Forwarded-For` entry, because Render appends the real address and does not remove values a caller sends.
+- **Privacy:** uploads live in memory under the visitor's session and expire after 30 minutes. Only the four most recently used uploads are kept, and a file may have at most 100,000 lines.
+- **Errors:** provider error text is logged on the server and never returned to the browser.
+- **Headers:** responses carry a Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, a referrer policy and HSTS over HTTPS.
 
 ---
 
@@ -150,7 +174,7 @@ The `Dockerfile` caches Maven dependencies in a layer, so only your changed sour
 
 - **In-memory storage.** The loaded log is lost when the container restarts or sleeps. The bundled sample log is reloaded on every boot, so the demo always works.
 - **Free-tier cold start.** Render sleeps after ~15 minutes idle; the first request afterwards can take up to a minute.
-- **No authentication.** Public endpoint — do not upload confidential production logs.
+- **No authentication.** Public endpoint. Uploads are private per session, but do not upload confidential production logs to a shared demo.
 - **Detection is rule-based, not adaptive.** The LLM explains findings; it does not discover new attack classes.
 - **Rate limiting is per-instance.** Buckets live in memory; multiple instances would need Redis.
 - **Sample data is synthetic.** IPs use documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`).
@@ -159,4 +183,4 @@ The `Dockerfile` caches Maven dependencies in a layer, so only your changed sour
 
 ## Licence
 
-MIT
+All rights reserved. The source is available for viewing only; see [LICENSE](LICENSE).
