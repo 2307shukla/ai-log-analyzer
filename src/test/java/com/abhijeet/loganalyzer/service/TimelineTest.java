@@ -115,4 +115,16 @@ class TimelineTest {
         assertEquals(48, Timeline.build(twoDays, 60).points().size());
         assertThrows(Timeline.TooManyPointsException.class, () -> Timeline.build(twoDays, 1));
     }
+
+    @Test
+    void anExceptionHeaderUnderAnErrorLineIsNotCountedTwice() {
+        List<LogEvent> events = new LogParser().parse(String.join("\n",
+                "2026-11-12T09:13:00.120Z ERROR 1 --- [x] [main] c.e.Svc : request failed",
+                "org.springframework.dao.DataAccessResourceFailureException: no connection",
+                "\tat com.example.Svc.run(Svc.java:1)",
+                "Caused by: java.sql.SQLException: timeout"));
+        Timeline.Result r = Timeline.build(events, 1);
+        assertEquals(1, r.points().get(0).requests());
+        assertEquals(1, r.points().get(0).appErrors());
+    }
 }

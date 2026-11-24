@@ -139,6 +139,28 @@ public class LogController {
         return body;
     }
 
+    static final int MAX_HISTORY_TURNS = 20;
+    static final int MAX_TURN_CHARS = 4_000;
+
+    /** Chat history is optional, but when sent it must be small and well formed. */
+    static String historyProblem(List<com.abhijeet.loganalyzer.model.ChatTurn> history) {
+        if (history == null) {
+            return null;
+        }
+        if (history.size() > MAX_HISTORY_TURNS) {
+            return "History is too long. Send at most " + MAX_HISTORY_TURNS + " earlier messages.";
+        }
+        for (com.abhijeet.loganalyzer.model.ChatTurn turn : history) {
+            if (turn == null || !("user".equals(turn.role()) || "assistant".equals(turn.role()))) {
+                return "Each history entry needs role user or assistant.";
+            }
+            if (turn.content() != null && turn.content().length() > MAX_TURN_CHARS) {
+                return "A history message is too long (at most " + MAX_TURN_CHARS + " characters).";
+            }
+        }
+        return null;
+    }
+
     /** "auto" means detect per line; anything else must name a format. */
     static LogFormat format(String value) {
         if (value == null || value.isBlank() || "auto".equalsIgnoreCase(value)) {
@@ -258,6 +280,10 @@ public class LogController {
         if (question.length() > LogAnalysisService.MAX_QUESTION) {
             return ResponseEntity.badRequest().body(Map.of("error",
                     "Question too long. Maximum is " + LogAnalysisService.MAX_QUESTION + " characters."));
+        }
+        String historyProblem = historyProblem(chat.history());
+        if (historyProblem != null) {
+            return ResponseEntity.badRequest().body(Map.of("error", historyProblem));
         }
         String sessionId = sessionId(request);
         if (store.isEmpty(sessionId)) {
