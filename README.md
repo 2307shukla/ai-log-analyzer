@@ -12,6 +12,14 @@ A security and reliability log analyzer built with **Spring Boot 3** and **Sprin
 
 Runs entirely on free tiers: no paid API, no database, no credit card.
 
+## At a glance
+
+- Upload a log in any of nine formats; the format is detected automatically.
+- Rule-based detection flags suspicious activity and maps it to MITRE ATT&CK.
+- Scores suspicious IPs, charts errors and spikes, and exports a PDF report.
+- AI writes the incident summary and answers questions; detection does not depend on it.
+- Free to run: no database and no paid API.
+
 ![Dashboard](docs/screenshots/dashboard.png)
 
 ---
