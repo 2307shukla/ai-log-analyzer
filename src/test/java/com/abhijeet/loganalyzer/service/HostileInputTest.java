@@ -65,8 +65,21 @@ class HostileInputTest {
         assertEquals("com.example.orders.OrderNotFoundException",
                 LogParser.exceptionName("Caused by com.example.orders.OrderNotFoundException."));
         assertEquals("x.y.FooError", LogParser.exceptionName("see x.y.FooError.details"));
+        assertEquals("a.FooException.BarError", LogParser.exceptionName("a.FooException.BarError"), "longest name, as before");
+        assertEquals("$x.y.OutOfMemoryError", LogParser.exceptionName("($x.y.OutOfMemoryError)"));
+        assertNull(LogParser.exceptionName("java.lang.Exception and java.lang.Error"), "needs a name before the suffix");
+        assertNull(LogParser.exceptionName("java..IOException"), "an empty part is not a package");
         assertNull(LogParser.exceptionName("IllegalStateException without a package"));
         assertNull(LogParser.exceptionName("nothing to see here"));
+    }
+
+    @Test
+    void json_logs_name_the_exception_too() {
+        List<LogEvent> events = parser.parse(
+                "{\"time\":\"2026-11-12T08:00:01Z\",\"level\":\"error\",\"message\":\"failed: java.io.IOException: disk full\"}");
+        assertEquals(1, events.size());
+        assertEquals("java.io.IOException", events.get(0).detail());
+        assertEquals("exception", events.get(0).category());
     }
 
     @Test

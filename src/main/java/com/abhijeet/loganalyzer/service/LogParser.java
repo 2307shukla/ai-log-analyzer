@@ -93,10 +93,6 @@ public class LogParser {
     /** Words made of letters, digits, "_", "$" and dots: the only places an exception name can be. */
     private static final Pattern DOTTED_WORD = Pattern.compile("[\\w$.]++");
 
-    /** A fully qualified exception name at the start of a dotted word, e.g. "java.io.IOException". */
-    private static final Pattern EXCEPTION_NAME = Pattern.compile(
-            "(?:[a-zA-Z_$][\\w$]*+\\.)+[A-Z][\\w$]*(?:Exception|Error)(?![\\w$])");
-
     /** Longer dotted words are not class names; skipping them bounds the work per word. */
     private static final int MAX_CLASS_NAME = 300;
 
@@ -537,8 +533,10 @@ public class LogParser {
     }
 
     /**
-     * The first fully qualified exception name in a message, e.g. "java.io.IOException". Each dotted
-     * word is checked once from its start instead of retrying the pattern at every position.
+     * The first fully qualified exception name in a message, e.g. "java.io.IOException": package
+     * parts, then a capitalised class part ending in "Exception" or "Error". Each dotted word is
+     * checked once, part by part, with no regex backtracking. Like the greedy pattern it replaces,
+     * it takes the longest name, so "a.FooException.BarError" gives the whole word.
      */
     static String exceptionName(String message) {
         Matcher word = DOTTED_WORD.matcher(message);
@@ -546,12 +544,55 @@ public class LogParser {
             if (word.end() - word.start() > MAX_CLASS_NAME) {
                 continue;
             }
-            Matcher name = EXCEPTION_NAME.matcher(message).region(word.start(), word.end());
-            if (name.lookingAt()) {
-                return name.group();
+            String name = exceptionNameAtStart(word.group());
+            if (name != null) {
+                return name;
             }
         }
         return null;
+    }
+
+    private static String exceptionNameAtStart(String word) {
+        String[] parts = word.split("\\.", -1);
+        int validPrefix = 0;  // how many leading parts are identifiers
+        while (validPrefix < parts.length && isIdentifier(parts[validPrefix])) {
+            validPrefix++;
+        }
+        // Part i is the class; parts 0..i-1 must be identifiers. Prefer the longest name.
+        for (int i = Math.min(validPrefix, parts.length - 1); i >= 1; i--) {
+            if (isExceptionClass(parts[i])) {
+                return String.join(".", java.util.Arrays.copyOfRange(parts, 0, i + 1));
+            }
+        }
+        return null;
+    }
+
+    /** "IOException", "OutOfMemoryError": capitalised, with at least one character before the suffix. */
+    private static boolean isExceptionClass(String part) {
+        return isIdentifier(part) && part.charAt(0) >= 'A' && part.charAt(0) <= 'Z'
+                && (endsWithAfterSomething(part, "Exception") || endsWithAfterSomething(part, "Error"));
+    }
+
+    private static boolean endsWithAfterSomething(String text, String suffix) {
+        return text.length() > suffix.length() && text.endsWith(suffix);
+    }
+
+    /** Java-style identifier in ASCII: a letter, "_" or "$", then letters, digits, "_" or "$". */
+    private static boolean isIdentifier(String part) {
+        if (part.isEmpty() || !(isAsciiLetter(part.charAt(0)) || part.charAt(0) == '_' || part.charAt(0) == '$')) {
+            return false;
+        }
+        for (int i = 1; i < part.length(); i++) {
+            char c = part.charAt(i);
+            if (!(isAsciiLetter(c) || (c >= '0' && c <= '9') || c == '_' || c == '$')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isAsciiLetter(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
     }
 
     private LogEvent syslog(String line, String program, String message, int year) {
@@ -795,8 +836,7 @@ public class LogParser {
         if (level != null) {
             level = level.toUpperCase(Locale.ROOT);
             if (message != null) {
-                Matcher exception = EXCEPTION_NAME.matcher(message);
-                detail = exception.find() ? exception.group(1) : null;
+                detail = exceptionName(message);
             }
             boolean error = "ERROR".equals(level) || "FATAL".equals(level);
             category = detail != null ? "exception" : error ? "app_error" : null;
