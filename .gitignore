@@ -7,3 +7,10 @@ target/
 .vscode/
 .DS_Store
 .env
+
+# Secrets and keys: never commit them
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
