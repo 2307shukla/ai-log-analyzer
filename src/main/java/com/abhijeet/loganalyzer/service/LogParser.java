@@ -44,9 +44,14 @@ import java.util.regex.Pattern;
 @Service
 public class LogParser {
 
+    // Uploaded logs are untrusted, so no pattern below may backtrack over the same text two ways
+    // (polynomial ReDoS): repeats that border each other are possessive (++, *+) and the trailing
+    // ".*" runs with DOTALL, because lines() leaves characters such as U+2028 that "." would stop at.
+
     /** Apache/Nginx combined log format. */
     private static final Pattern COMBINED = Pattern.compile(
-            "^(\\S+) \\S+ \\S+ \\[([^\\]]+)] \"(\\S+) (\\S+)[^\"]*\" (\\d{3}) (\\S+)(?: \"([^\"]*)\" \"([^\"]*)\")?.*$");
+            "^(\\S++) \\S++ \\S++ \\[([^\\]]++)] \"(\\S++) ([^\\s\"]++)[^\"]*+\" (\\d{3}) (\\S++)"
+                    + "(?: \"([^\"]*+)\" \"([^\"]*+)\")?+.*$", Pattern.DOTALL);
 
     /** First IPv4 address anywhere in the line - used as a fallback. */
     private static final Pattern IPV4 = Pattern.compile("\\b(\\d{1,3}(?:\\.\\d{1,3}){3})\\b");
@@ -77,22 +82,34 @@ public class LogParser {
 
     /** Spring Boot default: "2026-11-12T08:00:01.123Z ERROR 1234 --- [app] [main] c.e.Foo : msg". */
     private static final Pattern SPRING = Pattern.compile(
-            "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d{1,9})?(?:Z|[+-]\\d{2}:?\\d{2})?)\\s+"
-                    + "(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\s+(.*)$");
+            "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d{1,9})?(?:Z|[+-]\\d{2}:?\\d{2})?)\\s++"
+                    + "(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\s++(.*)$", Pattern.DOTALL);
 
     /** Logback / log4j: "2026-11-12 08:00:01,123 [http-nio-8080-exec-1] ERROR c.e.Foo - msg". */
     private static final Pattern LOGBACK = Pattern.compile(
-            "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d{1,9})?(?:Z|[+-]\\d{2}:?\\d{2})?)\\s+"
-                    + "\\[[^\\]]*]\\s+(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\s+(.*)$");
+            "^(\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d{1,9})?(?:Z|[+-]\\d{2}:?\\d{2})?)\\s++"
+                    + "\\[[^\\]]*+]\\s++(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\\s++(.*)$", Pattern.DOTALL);
 
+    /** Words made of letters, digits, "_", "$" and dots: the only places an exception name can be. */
+    private static final Pattern DOTTED_WORD = Pattern.compile("[\\w$.]++");
+
+    /** A fully qualified exception name at the start of a dotted word, e.g. "java.io.IOException". */
     private static final Pattern EXCEPTION_NAME = Pattern.compile(
-            "\\b((?:[a-zA-Z_$][\\w$]*\\.)+[A-Z][\\w$]*(?:Exception|Error))\\b");
+            "(?:[a-zA-Z_$][\\w$]*+\\.)+[A-Z][\\w$]*(?:Exception|Error)(?![\\w$])");
+
+    /** Longer dotted words are not class names; skipping them bounds the work per word. */
+    private static final int MAX_CLASS_NAME = 300;
+
+    /** 9999-12-31T23:59:59.999Z in epoch milliseconds: the largest numeric timestamp accepted. */
+    private static final double MAX_EPOCH_MILLIS = 253_402_300_799_999d;
 
     private static final Pattern EXCEPTION_HEADER = Pattern.compile(
             "^((?:[a-zA-Z_$][\\w$]*\\.)+[A-Z][\\w$]*(?:Exception|Error|Throwable))(?::.*)?$");
 
+    private static final String CAUSED_BY_PREFIX = "Caused by: ";
+
     private static final Pattern CAUSED_BY = Pattern.compile(
-            "^Caused by: ((?:[a-zA-Z_$][\\w$]*\\.)+[A-Z][\\w$]*)(?::.*)?$");
+            "^" + CAUSED_BY_PREFIX + "((?:[a-zA-Z_$][\\w$]*\\.)+[A-Z][\\w$]*)(?::.*)?$");
 
     private static final Pattern STACK_FRAME = Pattern.compile(
             "^(?:at [\\w$.<>/]+\\(.*\\)|\\.\\.\\. \\d+ (?:more|common frames omitted)|Suppressed: .*)$");
@@ -101,10 +118,11 @@ public class LogParser {
 
     /** "Nov 12 03:20:11 host program[pid]: message", or the same with an ISO time first. */
     private static final Pattern SYSLOG_HEADER = Pattern.compile(
-            "^(?:[A-Z][a-z]{2}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}:\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\S+)\\s+\\S+\\s+"
-                    + "([\\w.()/-]+?)(?:\\[\\d+])?:\\s*(.*)$");
+            "^(?:[A-Z][a-z]{2}\\s++\\d{1,2}\\s++\\d{2}:\\d{2}:\\d{2}|\\d{4}-\\d{2}-\\d{2}T\\S++)\\s++\\S++\\s++"
+                    + "([\\w.()/-]+?)(?:\\[\\d+])?:\\s*+(.*)$", Pattern.DOTALL);
 
-    private static final Pattern SUDO_COMMAND = Pattern.compile("^\\s*(\\S+) : .*COMMAND=(.*)$");
+    private static final String SUDO_SEPARATOR = " : ";
+    private static final String SUDO_COMMAND = "COMMAND=";
     private static final Pattern SU_TARGET = Pattern.compile(
             "(?:\\(to (\\S+)\\) (\\S+) on|session opened for user (\\S+?)(?:\\(uid=\\d+\\))? by (\\S+?)(?:\\(uid=\\d+\\))?$"
                     + "|Successful su for (\\S+) by (\\S+))");
@@ -438,8 +456,7 @@ public class LogParser {
             level = "WARN";
         }
         String message = m.group(3);
-        Matcher exception = EXCEPTION_NAME.matcher(message);
-        String detail = exception.find() ? exception.group(1) : null;
+        String detail = exceptionName(message);
         boolean error = "ERROR".equals(level) || "FATAL".equals(level);
         String category = detail != null ? "exception" : error ? "app_error" : null;
 
@@ -452,11 +469,21 @@ public class LogParser {
      * exception header that repeats the exception already named on the log line above is not
      * counted twice.
      */
+    /**
+     * Whether the text from {@code from} up to the first ":" is short enough to be a class name.
+     * The stack-trace patterns repeat a group per package segment, and Java's regex engine uses a
+     * stack frame per repetition, so a crafted name with thousands of segments would overflow it.
+     */
+    private static boolean classNameFits(String line, int from) {
+        int colon = line.indexOf(':', from);
+        return (colon < 0 ? line.length() : colon) - from <= MAX_CLASS_NAME;
+    }
+
     private LogEvent stackLine(String line, LogEvent previous, LogEvent previousLogLine) {
         boolean afterJava = previous != null && previous.format() == LogFormat.SPRING_BOOT;
 
         Matcher header = EXCEPTION_HEADER.matcher(line);
-        if (header.matches()) {
+        if (classNameFits(line, 0) && header.matches()) {
             String name = header.group(1);
             boolean alreadyCounted = afterJava && previousLogLine != null
                     && name.equals(previousLogLine.detail()) && previous == previousLogLine;
@@ -466,7 +493,7 @@ public class LogParser {
             return null;
         }
         Matcher cause = CAUSED_BY.matcher(line);
-        if (cause.matches()) {
+        if (classNameFits(line, CAUSED_BY_PREFIX.length()) && cause.matches()) {
             return stackEvent(line, previous, "caused_by", cause.group(1));
         }
         if (STACK_FRAME.matcher(line).matches()) {
@@ -483,6 +510,50 @@ public class LogParser {
 
     // ----------------------------------------------------------------- Syslog
 
+    /**
+     * "alice : TTY=pts/0 ; PWD=/home ; USER=root ; COMMAND=/bin/ls" gives [alice, /bin/ls]: the
+     * first word must be followed by " : ", and the command is everything after the last
+     * "COMMAND=". Plain text search, so a crafted line can't make it slow.
+     */
+    static String[] sudoCommand(String message) {
+        int start = 0;
+        while (start < message.length() && Character.isWhitespace(message.charAt(start))) {
+            start++;
+        }
+        int separator = message.indexOf(SUDO_SEPARATOR, start);
+        if (separator <= start) {
+            return null;
+        }
+        for (int i = start; i < separator; i++) {
+            if (Character.isWhitespace(message.charAt(i))) {
+                return null;
+            }
+        }
+        int command = message.lastIndexOf(SUDO_COMMAND);
+        if (command < separator + SUDO_SEPARATOR.length()) {
+            return null;
+        }
+        return new String[] {message.substring(start, separator), message.substring(command + SUDO_COMMAND.length())};
+    }
+
+    /**
+     * The first fully qualified exception name in a message, e.g. "java.io.IOException". Each dotted
+     * word is checked once from its start instead of retrying the pattern at every position.
+     */
+    static String exceptionName(String message) {
+        Matcher word = DOTTED_WORD.matcher(message);
+        while (word.find()) {
+            if (word.end() - word.start() > MAX_CLASS_NAME) {
+                continue;
+            }
+            Matcher name = EXCEPTION_NAME.matcher(message).region(word.start(), word.end());
+            if (name.lookingAt()) {
+                return name.group();
+            }
+        }
+        return null;
+    }
+
     private LogEvent syslog(String line, String program, String message, int year) {
         String prog = program.toLowerCase(Locale.ROOT);
         String lower = message.toLowerCase(Locale.ROOT);
@@ -492,18 +563,18 @@ public class LogParser {
         boolean failure = false;
 
         if (prog.startsWith("sudo")) {
-            Matcher cmd = SUDO_COMMAND.matcher(message);
+            String[] cmd = sudoCommand(message);
             if (lower.contains("incorrect password attempt") || lower.contains("authentication failure")) {
                 category = "sudo_failure";
                 failure = true;
-                user = cmd.find() ? cmd.group(1) : group(PAM_USER, message);
+                user = cmd != null ? cmd[0] : group(PAM_USER, message);
                 if (user == null) {
                     user = message.strip().split("\\s+")[0];
                 }
-            } else if (cmd.find()) {
+            } else if (cmd != null) {
                 category = "sudo_command";
-                user = cmd.group(1);
-                detail = cmd.group(2).strip();
+                user = cmd[0];
+                detail = cmd[1].strip();
             }
         } else if (prog.startsWith("su")) {
             if (lower.contains("failed su") || lower.contains("authentication failure")) {
@@ -960,6 +1031,11 @@ public class LogParser {
         }
         try {
             double number = Double.parseDouble(v);
+            // Epoch seconds or milliseconds up to the year 9999; anything else (NaN, infinity,
+            // negative or absurdly large values from the uploaded file) is not a timestamp.
+            if (!(number >= 0 && number <= MAX_EPOCH_MILLIS)) {
+                return null;
+            }
             long whole = (long) number;
             return whole > 100_000_000_000L ? Instant.ofEpochMilli(whole) : Instant.ofEpochSecond(whole);
         } catch (NumberFormatException | DateTimeException ignored) {
